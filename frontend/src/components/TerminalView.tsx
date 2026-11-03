@@ -81,8 +81,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const outputBufferRef = useRef<string>('');
-  const inputBufferRef = useRef<string>('');
-  const lastDetectedPromptPathRef = useRef<string>('');
+  const lastDirRef = useRef<string>(
+    typeof window !== 'undefined'
+      ? localStorage.getItem(`terminal-lastdir-${vmID}`) || ''
+      : ''
+  );
   const { theme } = useTheme();
 
   // Search Bar state
@@ -103,6 +106,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           }
           if (res.directory) {
             setCurrentDir(res.directory);
+            lastDirRef.current = res.directory;
+            try {
+              localStorage.setItem(`terminal-lastdir-${vmID}`, res.directory);
+            } catch {}
           }
         }
       } catch (err) {
@@ -114,54 +121,47 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     [vmID]
   );
 
-  // Parse prompt to auto-detect current directory
+  // Parse prompt to detect current working directory (identical to manager-system-internal)
   const checkPromptPath = useCallback(
     (chunk: string) => {
-      // Append chunk to sliding buffer to handle split packets
       outputBufferRef.current += chunk;
       if (outputBufferRef.current.length > 4096) {
         outputBufferRef.current = outputBufferRef.current.slice(-2048);
       }
-      const buffer = outputBufferRef.current;
 
-      let detectedPath: string | null = null;
+      // Check both the incoming chunk and the sliding buffer
+      const candidates = [chunk, outputBufferRef.current];
 
-      // 1. Check OSC Title sequence (Ubuntu/Debian standard on every prompt)
-      // e.g.: \x1b]0;user@host: ~/AppGolang/ladrillera-onboarding/logs\x07
-      const oscMatch = buffer.match(/\x1b\]0;[^:]+:\s*([~\/][^\x07\x1b]*)(?:\x07|\x1b\\)/);
-      if (oscMatch && oscMatch[1]) {
-        detectedPath = oscMatch[1].trim();
-      }
+      const promptPatterns = [
+        /[@\w.-]+:([~\/][^\$#\n\r]*?)[\$#]\s*$/m,
+        /\[?[\w.-]+@[\w.-]+[\s:]+([~\/][^\]$#\n\r]*?)\]?[\$#]\s*$/m,
+        /:([~\/][^\$#\n\r]*?)[\$#]\s*$/m,
+      ];
 
-      // 2. If no OSC match, clean ANSI codes (including bracketed paste ?2004h) and test prompt patterns
-      if (!detectedPath) {
-        const cleanData = buffer
+      for (const text of candidates) {
+        // Strip ANSI escape codes
+        const cleanData = text
           .replace(/\x1b\[[0-9;?><=]*[a-zA-Z]/g, '')
           .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
-          .replace(/\x1b[@-Z\\-_]/g, '')
-          .replace(/[\r\n]+/g, '\n');
-
-        const promptPatterns = [
-          /[@\w.-]+:([~\/][^\$#\n\r]*?)[\$#]\s*$/m,
-          /\[?[\w.-]+@[\w.-]+[\s:]+([~\/][^\]$#\n\r]*?)\]?[\$#]\s*$/m,
-          /:([~\/][^\$#\n\r]*?)[\$#]\s*$/m,
-        ];
+          .replace(/\x1b[@-Z\\-_]/g, '');
 
         for (const pattern of promptPatterns) {
           const promptMatch = cleanData.match(pattern);
           if (promptMatch && promptMatch[1]) {
-            detectedPath = promptMatch[1].trim();
-            break;
+            const detectedPath = promptMatch[1].trim();
+            if (detectedPath && detectedPath !== lastDirRef.current) {
+              lastDirRef.current = detectedPath;
+              try {
+                localStorage.setItem(`terminal-lastdir-${vmID}`, detectedPath);
+              } catch {}
+              listDirectory(detectedPath);
+              return;
+            }
           }
         }
       }
-
-      if (detectedPath && detectedPath !== lastDetectedPromptPathRef.current) {
-        lastDetectedPromptPathRef.current = detectedPath;
-        listDirectory(detectedPath);
-      }
     },
-    [listDirectory]
+    [vmID, listDirectory]
   );
 
   // Execute command sent by TerminalSearchBar
@@ -185,6 +185,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const toggleSearchBar = useCallback(() => {
     setShowSearchBar((prev) => {
       const next = !prev;
+      if (next) {
+        const cwd = currentDir || lastDirRef.current || undefined;
+        if (dirEntries.length === 0 || (cwd && cwd !== currentDir)) {
+          setTimeout(() => listDirectory(cwd), 100);
+        }
+      }
       setTimeout(() => {
         try {
           fitAddonRef.current?.fit();
@@ -192,7 +198,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }, 60);
       return next;
     });
-  }, []);
+  }, [currentDir, dirEntries.length, listDirectory]);
 
   // Keyboard shortcut Ctrl+Shift+F to toggle search bar
   useEffect(() => {
@@ -208,7 +214,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   // Initial directory load
   useEffect(() => {
-    listDirectory();
+    const initialDir = lastDirRef.current || undefined;
+    listDirectory(initialDir);
   }, [listDirectory]);
 
   // Terminal lifecycle
@@ -275,27 +282,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       };
     }
 
-    // Keystroke handler
+    // Keystroke handler (forward raw data directly to remote shell)
     const dataDisposable = term.onData((data) => {
       if (isNative) {
         onSendInput(sessionID, data);
       } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(data);
-      }
-
-      // Track typed input to immediately trigger directory re-check on Enter / cd
-      if (data === '\r' || data === '\n') {
-        const typed = inputBufferRef.current.trim();
-        if (typed.startsWith('cd ') || typed === 'cd') {
-          setTimeout(() => {
-            checkPromptPath(outputBufferRef.current);
-          }, 350);
-        }
-        inputBufferRef.current = '';
-      } else if (data === '\x7f' || data === '\b') {
-        inputBufferRef.current = inputBufferRef.current.slice(0, -1);
-      } else if (data.length === 1 && data >= ' ') {
-        inputBufferRef.current += data;
       }
     });
 

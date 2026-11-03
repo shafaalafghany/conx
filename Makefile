@@ -44,7 +44,7 @@ install-wails:
 # Development
 dev-web:
 	@printf '%b\n' '${GREEN}Starting Conx Go API & SSH Gateway (:3333) + Vite Frontend (:5173)...${RESET}'
-	@go run ./cmd/server/main.go & SERVER_PID=$$!; \
+	@go run ./cmd/server & SERVER_PID=$$!; \
 	trap 'kill $$SERVER_PID 2>/dev/null' EXIT INT TERM; \
 	cd frontend && npm run dev
 

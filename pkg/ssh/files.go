@@ -24,6 +24,7 @@ type FileListResult struct {
 }
 
 // ListRemoteFiles connects via SSH to the remote host and inspects the specified directory
+// Matches manager-system-internal implementation
 func ListRemoteFiles(host string, port int, user string, password string, keyData string, targetDir string) (string, []DirEntry, error) {
 	if port <= 0 {
 		port = 22
@@ -64,11 +65,12 @@ func ListRemoteFiles(host string, port int, user string, password string, keyDat
 	}
 	defer session.Close()
 
-	startMarker := fmt.Sprintf("__CONX_LS_START_%d__", time.Now().UnixNano())
-	endMarker := fmt.Sprintf("__CONX_LS_END_%d__", time.Now().UnixNano())
+	marker := fmt.Sprintf("__LS_START_%d__", time.Now().UnixNano())
+	endMarker := fmt.Sprintf("__LS_END_%d__", time.Now().UnixNano())
 
+	// Use eval to expand ~ properly, fallback to direct cd (exactly like manager-system-internal)
 	cdCmd := `eval cd ~`
-	if targetDir != "" && targetDir != "~" {
+	if targetDir != "" {
 		if strings.HasPrefix(targetDir, "~") {
 			cdCmd = fmt.Sprintf("eval cd %s", targetDir)
 		} else {
@@ -76,7 +78,7 @@ func ListRemoteFiles(host string, port int, user string, password string, keyDat
 		}
 	}
 
-	cmd := fmt.Sprintf(`echo '%s' && %s 2>/dev/null && pwd && echo "---" && ls -1tp 2>/dev/null && echo '%s'`, startMarker, cdCmd, endMarker)
+	cmd := fmt.Sprintf(`echo '%s' && %s 2>/dev/null && pwd && echo "---" && ls -1tp 2>/dev/null && echo '%s'`, marker, cdCmd, endMarker)
 
 	outputBytes, err := session.CombinedOutput(cmd)
 	if err != nil && len(outputBytes) == 0 {
@@ -84,33 +86,34 @@ func ListRemoteFiles(host string, port int, user string, password string, keyDat
 	}
 
 	output := string(outputBytes)
-	startIdx := strings.Index(output, startMarker)
+	startIdx := strings.Index(output, marker)
 	endIdx := strings.Index(output, endMarker)
 
 	var clean string
 	if startIdx >= 0 && endIdx >= 0 && endIdx > startIdx {
-		clean = strings.TrimSpace(output[startIdx+len(startMarker) : endIdx])
+		clean = strings.TrimSpace(output[startIdx+len(marker) : endIdx])
 	} else {
 		clean = strings.TrimSpace(output)
 	}
 
 	lines := strings.Split(clean, "\n")
 	resolvedDir := "/"
-	sepIdx := -1
-
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if i == 0 && (strings.HasPrefix(trimmed, "/") || strings.HasPrefix(trimmed, "~")) {
-			resolvedDir = trimmed
+	if len(lines) > 0 && strings.TrimSpace(lines[0]) != "" {
+		firstLine := strings.TrimSpace(lines[0])
+		if strings.HasPrefix(firstLine, "/") || strings.HasPrefix(firstLine, "~") {
+			resolvedDir = firstLine
 		}
-		if trimmed == "---" {
+	}
+	if resolvedDir == "/" && targetDir != "" {
+		resolvedDir = targetDir
+	}
+
+	sepIdx := -1
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "---" {
 			sepIdx = i
 			break
 		}
-	}
-
-	if resolvedDir == "/" && targetDir != "" {
-		resolvedDir = targetDir
 	}
 
 	var rawEntries []string
