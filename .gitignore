@@ -1,0 +1,23 @@
+# Binaries & Wails build output
+build/bin/
+conx
+*.exe
+*.app
+*.dmg
+
+# Frontend dependencies and output
+frontend/node_modules/
+frontend/dist/
+frontend/wailsjs/
+
+# Local databases and runtime files
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+
+# Go test and coverage output
+*.out
+*.test
+
+.agent*
