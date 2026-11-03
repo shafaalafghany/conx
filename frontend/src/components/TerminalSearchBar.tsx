@@ -232,6 +232,17 @@ export const TerminalSearchBar: React.FC<TerminalSearchBarProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const fileDropdownRef = useRef<HTMLDivElement>(null);
   const keywordInputRef = useRef<HTMLInputElement>(null);
+  const prevCurrentDirRef = useRef(currentDir);
+
+  // When currentDir changes, reset selected file so it reflects the new directory
+  useEffect(() => {
+    if (prevCurrentDirRef.current && currentDir !== prevCurrentDirRef.current) {
+      if (!isManualInput) {
+        setSelectedFile('');
+      }
+    }
+    prevCurrentDirRef.current = currentDir;
+  }, [currentDir, isManualInput]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -390,8 +401,9 @@ export const TerminalSearchBar: React.FC<TerminalSearchBarProps> = ({
           <button
             type="button"
             onClick={() => {
-              setShowFileBrowser(!showFileBrowser);
-              if (!showFileBrowser && dirEntries.length === 0) {
+              const next = !showFileBrowser;
+              setShowFileBrowser(next);
+              if (next) {
                 onNavigate(currentDir || undefined);
               }
             }}

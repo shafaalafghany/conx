@@ -1,6 +1,7 @@
 # Binaries & Wails build output
 build/bin/
 conx
+/server
 *.exe
 *.app
 *.dmg
