@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { WindowTopBar } from './components/layout/WindowTopBar';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { VMGrid } from './components/vm/VMGrid';
@@ -177,24 +178,38 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen flex bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 overflow-hidden">
-      {/* Sidebar Navigation */}
-      <Sidebar
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
+    <div className="h-screen flex flex-col bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 overflow-hidden">
+      {/* Top Window Bar: Traffic Lights & Draggable Space (Spotify Style) */}
+      <WindowTopBar
         sidebarCollapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-        vmCount={vms.length}
-        activeSessionCount={sessions.length}
       />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top Header Navbar */}
-        <Header activeTab={activeTab} />
+      {/* Main Workspace (Sidebar + Content Panel) */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* Sidebar Navigation */}
+        <Sidebar
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          vmCount={vms.length}
+          activeSessionCount={sessions.length}
+        />
+
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {/* Top Header Navbar */}
+          <Header activeTab={activeTab} />
 
         {/* Tab Body */}
-        <main className="flex-1 p-4 md:p-6 overflow-auto">
+        <main
+          className={`flex-1 p-4 md:p-6 ${
+            activeTab === 'terminal' || activeTab === 'database'
+              ? 'overflow-hidden flex flex-col min-h-0'
+              : 'overflow-auto'
+          }`}
+        >
           {activeTab === 'vms' && (
             <VMGrid
               vms={vms}
@@ -227,6 +242,7 @@ export default function App() {
           {activeTab === 'vault' && <VaultView />}
         </main>
       </div>
+    </div>
 
       {/* Add VM Modal */}
       <AddVMModal

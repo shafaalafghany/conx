@@ -7,11 +7,11 @@
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
   "author": {
-    "name": "Conx Engineering",
-    "email": "dev@internal.local"
+    "name": "Shafa Alafghany",
+    "email": "[EMAIL_ADDRESS]"
   },
   "info": {
-    "companyName": "Internal",
+    "companyName": "Dawn",
     "productName": "Conx",
     "productVersion": "0.1.0",
     "copyright": "Copyright 2026",

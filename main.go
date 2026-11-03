@@ -26,7 +26,7 @@ func main() {
 		Frameless:         false,
 		StartHidden:       false,
 		HideWindowOnClose: false,
-		BackgroundColour:  &options.RGBA{R: 255, G: 255, B: 255, A: 255},
+		BackgroundColour:  &options.RGBA{R: 17, G: 24, B: 39, A: 255},
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -36,9 +36,9 @@ func main() {
 			app,
 		},
 		Mac: &mac.Options{
-			TitleBar:             mac.TitleBarHiddenInset(),
-			Appearance:           mac.DefaultAppearance,
-			WebviewIsTransparent: false,
+			TitleBar:             mac.TitleBarHidden(),
+			Appearance:           mac.NSAppearanceNameDarkAqua,
+			WebviewIsTransparent: true,
 			WindowIsTranslucent:  false,
 		},
 	})

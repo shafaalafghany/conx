@@ -18,9 +18,21 @@ function applyTheme(theme: Theme) {
   if (theme === 'dark') {
     root.classList.add('dark');
     if (body) body.classList.add('dark');
+    if (typeof window !== 'undefined' && (window as any).runtime) {
+      try {
+        (window as any).runtime.WindowSetDarkTheme?.();
+        (window as any).runtime.WindowSetBackgroundColour?.(17, 24, 39, 255);
+      } catch {}
+    }
   } else {
     root.classList.remove('dark');
     if (body) body.classList.remove('dark');
+    if (typeof window !== 'undefined' && (window as any).runtime) {
+      try {
+        (window as any).runtime.WindowSetLightTheme?.();
+        (window as any).runtime.WindowSetBackgroundColour?.(243, 244, 246, 255);
+      } catch {}
+    }
   }
 }
 

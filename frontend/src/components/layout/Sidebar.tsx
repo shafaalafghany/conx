@@ -5,7 +5,7 @@ interface SidebarProps {
   activeTab: NavigationTab;
   onSelectTab: (tab: NavigationTab) => void;
   sidebarCollapsed: boolean;
-  onToggleCollapse: () => void;
+  onToggleCollapse?: () => void;
   vmCount: number;
   activeSessionCount: number;
 }
@@ -24,34 +24,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
         sidebarCollapsed ? 'w-16' : 'w-64'
       }`}
     >
-      {/* Sidebar Header */}
-      <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
-        {!sidebarCollapsed && (
-          <h1 className="text-xl font-black text-gray-900 dark:text-gray-100 flex items-center gap-2 tracking-tight font-mono">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
-            conx
-          </h1>
+      {/* 
+        Sidebar Header Row
+        Sits right below the 40px WindowTopBar, matching the main content Header height (h-12 = 48px)
+      */}
+      <div className="h-12 flex items-center px-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 select-none">
+        {!sidebarCollapsed ? (
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse flex-shrink-0" />
+            <h1 className="text-xl font-black text-gray-900 dark:text-gray-100 tracking-tight font-mono">
+              conx
+            </h1>
+          </div>
+        ) : (
+          <button
+            onClick={onToggleCollapse}
+            className="w-full flex justify-center py-1 hover:opacity-80 transition-opacity"
+            title="Expand sidebar"
+          >
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse flex-shrink-0" />
+          </button>
         )}
-        <button
-          onClick={onToggleCollapse}
-          className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors mx-auto"
-          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            {sidebarCollapsed ? (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            )}
-          </svg>
-        </button>
       </div>
 
       {/* Sidebar Navigation */}
       <nav className="p-3 space-y-1.5 flex-1 overflow-y-auto">
         <button
           onClick={() => onSelectTab('vms')}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${
+          className={`w-full flex items-center text-sm font-medium rounded-md transition-colors ${
+            sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'
+          } ${
             activeTab === 'vms'
               ? 'text-gray-900 dark:text-gray-100 bg-gray-200 dark:bg-gray-700'
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700/60'
@@ -71,7 +73,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         <button
           onClick={() => onSelectTab('terminal')}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${
+          className={`w-full flex items-center text-sm font-medium rounded-md transition-colors ${
+            sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'
+          } ${
             activeTab === 'terminal'
               ? 'text-gray-900 dark:text-gray-100 bg-gray-200 dark:bg-gray-700'
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700/60'
@@ -91,7 +95,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         <button
           onClick={() => onSelectTab('database')}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${
+          className={`w-full flex items-center text-sm font-medium rounded-md transition-colors ${
+            sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'
+          } ${
             activeTab === 'database'
               ? 'text-gray-900 dark:text-gray-100 bg-gray-200 dark:bg-gray-700'
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700/60'
@@ -109,7 +115,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-3 border-t border-gray-200 dark:border-gray-700 mt-auto flex-shrink-0">
         <button
           onClick={() => onSelectTab('vault')}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${
+          className={`w-full flex items-center text-sm font-medium rounded-md transition-colors ${
+            sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'
+          } ${
             activeTab === 'vault'
               ? 'text-gray-900 dark:text-gray-100 bg-gray-200 dark:bg-gray-700'
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700/60'

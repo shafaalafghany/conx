@@ -59,6 +59,32 @@ export const api = {
     return res.json();
   },
 
+  // --- SSH Terminal ---
+  startSSHSession: async (vmId: string, cols = 80, rows = 24): Promise<string> => {
+    if (isWails()) {
+      return getWailsApp().StartSSHSession(vmId, cols, rows);
+    }
+    return `web-${vmId}-${Date.now()}`;
+  },
+
+  sendTerminalInput: async (sessionId: string, data: string): Promise<void> => {
+    if (isWails()) {
+      return getWailsApp().SendTerminalInput(sessionId, data);
+    }
+  },
+
+  resizeTerminal: async (sessionId: string, cols: number, rows: number): Promise<void> => {
+    if (isWails()) {
+      return getWailsApp().ResizeTerminal(sessionId, cols, rows);
+    }
+  },
+
+  closeSSHSession: async (sessionId: string): Promise<void> => {
+    if (isWails()) {
+      return getWailsApp().CloseSSHSession(sessionId);
+    }
+  },
+
   // --- Databases ---
   listDatabases: async () => {
     if (isWails()) {
@@ -111,6 +137,10 @@ export const api = {
 
   connectDatabase: async (id: string) => {
     if (isWails()) {
+      const dbs = await getWailsApp().ListDatabases();
+      const target = (dbs || []).find((c: any) => c.id === id);
+      if (!target) throw new Error('Database profile not found');
+      await getWailsApp().TestDatabaseConnection(target, '');
       return { status: 'connected' };
     }
     const res = await fetch(`/api/databases/${encodeURIComponent(id)}/connect`, { method: 'POST' });

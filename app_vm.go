@@ -36,6 +36,20 @@ func (a *App) SaveVM(vm database.VirtualMachine, rawPassword string, rawKey stri
 		if vm.ID == "" {
 			vm.ID = uuid.NewString()
 		}
+	} else {
+		// Preserve existing encrypted secrets if not updating
+		existingVMs, _ := a.storage.ListVMs()
+		for _, existing := range existingVMs {
+			if existing.ID == vm.ID {
+				if rawPassword == "" && vm.EncryptedPassword == "" {
+					vm.EncryptedPassword = existing.EncryptedPassword
+				}
+				if rawKey == "" && vm.EncryptedKey == "" {
+					vm.EncryptedKey = existing.EncryptedKey
+				}
+				break
+			}
+		}
 	}
 
 	if rawPassword != "" && a.vault != nil {

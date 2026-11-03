@@ -12,9 +12,10 @@ interface TerminalViewProps {
   vmID: string;
   vmName: string;
   host: string;
+  isActive?: boolean;
   onClose: (sessionID: string) => void;
-  onSendInput: (sessionID: string, data: string) => void;
-  onResize: (sessionID: string, cols: number, rows: number) => void;
+  onSendInput?: (sessionID: string, data: string) => void;
+  onResize?: (sessionID: string, cols: number, rows: number) => void;
 }
 
 // Light theme tokens (Default)
@@ -72,6 +73,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   vmID,
   vmName,
   host,
+  isActive = true,
   onClose,
   onSendInput,
   onResize,
@@ -80,6 +82,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const termInstance = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const wailsSessionIdRef = useRef<string>('');
   const outputBufferRef = useRef<string>('');
   const lastDirRef = useRef<string>(
     typeof window !== 'undefined'
@@ -121,7 +124,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     [vmID]
   );
 
-  // Parse prompt to detect current working directory (identical to manager-system-internal)
+  // Parse prompt to detect current working directory
   const checkPromptPath = useCallback(
     (chunk: string) => {
       outputBufferRef.current += chunk;
@@ -164,19 +167,46 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     [vmID, listDirectory]
   );
 
+  // Send Ctrl+C to interrupt active foreground process
+  const handleInterrupt = useCallback(() => {
+    const isNative = isWails();
+    const targetId = wailsSessionIdRef.current || sessionID;
+    if (isNative && targetId) {
+      api.sendTerminalInput(targetId, '\x03').catch(() => {});
+    } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send('\x03');
+    }
+    termInstance.current?.focus();
+  }, [sessionID]);
+
   // Execute command sent by TerminalSearchBar
   const handleExecuteCommand = useCallback(
     (command: string) => {
       const trimmed = command.trim();
       if (!trimmed) return;
-      const cmdToSend = trimmed + '\n';
       const isNative = isWails();
-      if (isNative) {
-        onSendInput(sessionID, cmdToSend);
+      const targetId = wailsSessionIdRef.current || sessionID;
+
+      // 1. Send Ctrl+C (\x03) first to interrupt any active foreground process (like tail -f)
+      if (isNative && targetId) {
+        api.sendTerminalInput(targetId, '\x03').catch(() => {});
       } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(cmdToSend);
+        wsRef.current.send('\x03');
       }
-      termInstance.current?.focus();
+
+      // 2. Wait 150ms for shell prompt to return before executing the new command
+      setTimeout(() => {
+        const cmdToSend = trimmed + '\n';
+        if (isNative) {
+          if (targetId) {
+            api.sendTerminalInput(targetId, cmdToSend).catch(() => {});
+          }
+          if (onSendInput) onSendInput(sessionID, cmdToSend);
+        } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(cmdToSend);
+        }
+        termInstance.current?.focus();
+      }, 150);
     },
     [sessionID, onSendInput]
   );
@@ -218,6 +248,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     listDirectory(initialDir);
   }, [listDirectory]);
 
+  // Re-fit on tab activation
+  useEffect(() => {
+    if (isActive) {
+      const timer = setTimeout(() => {
+        try {
+          fitAddonRef.current?.fit();
+          termInstance.current?.focus();
+        } catch (e) {}
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [isActive]);
+
   // Terminal lifecycle
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -245,16 +288,34 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     setTimeout(() => {
       try {
         fitAddon.fit();
-        if (isNative) {
-          onResize(sessionID, term.cols, term.rows);
-        }
-      } catch (e) {
-        // ignore layout race
-      }
+      } catch (e) {}
     }, 100);
 
-    // If running in browser mode (make dev-web), connect via WebSocket bridge
-    if (!isNative) {
+    // If running in Native Wails desktop mode
+    if (isNative) {
+      term.write(`\r\n\x1b[36m[Connecting to ${host} via SSH...]\x1b[0m\r\n`);
+      const cols = term.cols > 0 ? term.cols : 80;
+      const rows = term.rows > 0 ? term.rows : 24;
+
+      api.startSSHSession(vmID, cols, rows)
+        .then((realSessionID) => {
+          wailsSessionIdRef.current = realSessionID;
+          term.write(`\x1b[32m[Connected to ${host}]\x1b[0m\r\n\r\n`);
+
+          const wailsRuntime = (window as any).runtime;
+          if (wailsRuntime && wailsRuntime.EventsOn) {
+            wailsRuntime.EventsOn(`terminal:output:${realSessionID}`, (chunk: string) => {
+              term.write(chunk);
+              checkPromptPath(chunk);
+            });
+          }
+        })
+        .catch((err) => {
+          console.error('[TerminalView] Native SSH start error:', err);
+          term.write(`\r\n\x1b[31m[SSH Connection Failed: ${err?.message || err}]\x1b[0m\r\n`);
+        });
+    } else {
+      // If running in browser mode (make dev-web), connect via WebSocket bridge
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${proto}//${window.location.host}/ws/ssh?vmId=${encodeURIComponent(vmID)}&cols=80&rows=24`;
       const ws = new WebSocket(wsUrl);
@@ -285,49 +346,68 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     // Keystroke handler (forward raw data directly to remote shell)
     const dataDisposable = term.onData((data) => {
       if (isNative) {
-        onSendInput(sessionID, data);
+        const targetId = wailsSessionIdRef.current || sessionID;
+        if (targetId) {
+          api.sendTerminalInput(targetId, data).catch(() => {});
+        }
+        if (onSendInput) onSendInput(sessionID, data);
       } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(data);
       }
     });
 
-    // Wails runtime event listener (if in native desktop)
-    const wailsRuntime = (window as any).runtime;
-    if (isNative && wailsRuntime && wailsRuntime.EventsOn) {
-      wailsRuntime.EventsOn(`terminal:output:${sessionID}`, (chunk: string) => {
-        term.write(chunk);
-        checkPromptPath(chunk);
-      });
-    }
-
-    // Window resize handler
-    const handleWindowResize = () => {
+    // Responsive fit & remote PTY resize handler
+    const doFitAndResize = () => {
       if (fitAddonRef.current && termInstance.current) {
         try {
           fitAddonRef.current.fit();
           const { cols, rows } = termInstance.current;
-          if (isNative) {
-            onResize(sessionID, cols, rows);
-          } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: 'resize', cols, rows }));
+          if (cols > 0 && rows > 0) {
+            const targetId = wailsSessionIdRef.current || sessionID;
+            if (isNative && targetId) {
+              api.resizeTerminal(targetId, cols, rows).catch(() => {});
+            } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'resize', cols, rows }));
+            }
+            if (onResize) onResize(sessionID, cols, rows);
           }
         } catch (e) {}
       }
     };
-    window.addEventListener('resize', handleWindowResize);
+
+    window.addEventListener('resize', doFitAndResize);
+
+    // Observe container size changes (e.g. sidebar collapse, search bar toggle, fullscreen toggle)
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && terminalRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        requestAnimationFrame(doFitAndResize);
+      });
+      resizeObserver.observe(terminalRef.current);
+    }
 
     return () => {
-      window.removeEventListener('resize', handleWindowResize);
+      window.removeEventListener('resize', doFitAndResize);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
       dataDisposable.dispose();
       if (wsRef.current) {
         wsRef.current.close();
       }
-      if (wailsRuntime && wailsRuntime.EventsOff) {
-        wailsRuntime.EventsOff(`terminal:output:${sessionID}`);
+      if (isNative) {
+        const targetId = wailsSessionIdRef.current;
+        const wailsRuntime = (window as any).runtime;
+        if (wailsRuntime && wailsRuntime.EventsOff && targetId) {
+          wailsRuntime.EventsOff(`terminal:output:${targetId}`);
+        }
+        if (targetId) {
+          api.closeSSHSession(targetId).catch(() => {});
+        }
       }
       term.dispose();
     };
-  }, [sessionID, vmID, onResize, onSendInput, checkPromptPath]);
+  }, [sessionID, vmID, host, onResize, onSendInput, checkPromptPath]);
 
   // Dynamically update terminal theme on Light/Dark switch
   useEffect(() => {
@@ -340,8 +420,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     termInstance.current?.clear();
   };
 
+  const handleClose = () => {
+    const targetId = wailsSessionIdRef.current;
+    if (isWails() && targetId) {
+      api.closeSSHSession(targetId).catch(() => {});
+    }
+    onClose(sessionID);
+  };
+
   return (
-    <div className="flex flex-col h-full rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm dark:bg-slate-900 dark:border-slate-800">
+    <div className="flex flex-col h-full min-h-0 rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm dark:bg-slate-900 dark:border-slate-800">
       {/* Session Header */}
       <div className="h-10 px-4 bg-slate-100/90 border-b border-slate-200 flex items-center justify-between dark:bg-slate-950 dark:border-slate-800">
         <div className="flex items-center gap-2">
@@ -384,7 +472,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
           {/* Close Session */}
           <button
-            onClick={() => onClose(sessionID)}
+            onClick={handleClose}
             title="Disconnect & Close Session"
             className="p-1.5 rounded hover:bg-rose-100 hover:text-rose-600 text-slate-400 dark:hover:bg-rose-950/60 dark:hover:text-rose-400 transition-colors"
           >
@@ -398,6 +486,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         visible={showSearchBar}
         onToggle={toggleSearchBar}
         onExecute={handleExecuteCommand}
+        onInterrupt={handleInterrupt}
         dirEntries={dirEntries}
         currentDir={currentDir}
         loadingLogs={loadingLogs}
@@ -407,7 +496,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       {/* Terminal Viewport */}
       <div
         ref={terminalRef}
-        className="flex-1 w-full p-2 overflow-hidden bg-white dark:bg-slate-950"
+        className="flex-1 w-full min-h-0 overflow-hidden bg-white dark:bg-slate-950"
       />
     </div>
   );

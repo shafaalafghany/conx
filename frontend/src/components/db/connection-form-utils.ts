@@ -16,12 +16,14 @@ export interface ConnectionFormData {
 }
 
 export interface ConnectionFormInitialData {
+  id?: string;
   dbType: DatabaseType;
   host: string;
   port: number;
   username: string;
   label?: string;
   databaseName?: string;
+  hasPassword?: boolean;
 }
 
 export interface FieldErrors {
@@ -60,7 +62,8 @@ export function validateConnectionForm(
     username: string;
     password: string;
   },
-  isEditMode: boolean
+  isEditMode: boolean,
+  hasExistingPassword = false
 ): FieldErrors {
   const errors: FieldErrors = {};
 
@@ -86,7 +89,7 @@ export function validateConnectionForm(
       errors.username = 'Username is required';
     }
 
-    if (!isEditMode && !data.password) {
+    if ((!isEditMode || !hasExistingPassword) && !data.password) {
       errors.password = 'Password is required';
     }
   }
