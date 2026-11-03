@@ -3,9 +3,10 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { useTheme } from '../context/ThemeContext';
-import { X, RefreshCw, Terminal as TerminalIcon, Search } from 'lucide-react';
+import { X, RefreshCw, Terminal as TerminalIcon, Search, Sparkles } from 'lucide-react';
 import { isWails, api } from '../api/client';
 import { TerminalSearchBar, DirEntry } from './TerminalSearchBar';
+import { PrettifyModal } from './terminal/PrettifyModal';
 
 interface TerminalViewProps {
   sessionID: string;
@@ -96,6 +97,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const [dirEntries, setDirEntries] = useState<DirEntry[]>([]);
   const [currentDir, setCurrentDir] = useState<string>('');
   const [loadingLogs, setLoadingLogs] = useState(false);
+
+  // Prettify Log / Selection state
+  const [selectedText, setSelectedText] = useState<string>('');
+  const [showPrettify, setShowPrettify] = useState<boolean>(false);
+  const lastSelectedTextRef = useRef<string>('');
 
   // Fetch directory listing via Go backend (dual-mode Wails/REST)
   const listDirectory = useCallback(
@@ -356,6 +362,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     });
 
+    // Detect text selection for Prettify Log feature
+    const selectionDisposable = term.onSelectionChange(() => {
+      const selection = term.getSelection() || '';
+      setSelectedText(selection);
+      if (selection.trim()) {
+        lastSelectedTextRef.current = selection;
+      }
+    });
+
     // Responsive fit & remote PTY resize handler
     const doFitAndResize = () => {
       if (fitAddonRef.current && termInstance.current) {
@@ -392,6 +407,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         resizeObserver.disconnect();
       }
       dataDisposable.dispose();
+      selectionDisposable.dispose();
       if (wsRef.current) {
         wsRef.current.close();
       }
@@ -447,6 +463,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         </div>
 
         <div className="flex items-center gap-1">
+          {/* Prettify Button (quick header action when text is selected) */}
+          {selectedText && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setShowPrettify(true)}
+              title="Prettify selected text (JSON / Logs)"
+              className="px-2.5 py-1 rounded text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm flex items-center gap-1 transition-all active:scale-95 cursor-pointer mr-1"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
+              <span>Prettify</span>
+            </button>
+          )}
+
           {/* Toggle Search Bar Button */}
           <button
             onClick={toggleSearchBar}
@@ -493,10 +523,67 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         onNavigate={listDirectory}
       />
 
+      {/* Selection Action Bar (Toolbar that appears whenever text is blocked/selected) */}
+      {selectedText && (
+        <div className="flex items-center justify-between px-3 py-1.5 bg-slate-100/95 border-b border-slate-200 dark:bg-slate-900/95 dark:border-slate-800 transition-all z-20">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setShowPrettify(true)}
+              className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-all bg-emerald-600 hover:bg-emerald-500 text-white active:scale-95 cursor-pointer"
+              title="Format & prettify selected text"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
+              <span>Prettify</span>
+            </button>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+              ({selectedText.length} characters selected)
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              termInstance.current?.clearSelection();
+              setSelectedText('');
+            }}
+            className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {/* Terminal Viewport */}
-      <div
-        ref={terminalRef}
-        className="flex-1 w-full min-h-0 overflow-hidden bg-white dark:bg-slate-950"
+      <div className="flex-1 w-full min-h-0 overflow-hidden relative flex flex-col">
+        {selectedText && (
+          <div className="absolute top-3 right-5 z-20">
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setShowPrettify(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg transition-all transform hover:scale-105 active:scale-95 border border-emerald-400/30 cursor-pointer"
+              title="Format & prettify selected text"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
+              <span>Prettify</span>
+            </button>
+          </div>
+        )}
+
+        <div
+          ref={terminalRef}
+          className="flex-1 w-full min-h-0 overflow-hidden bg-white dark:bg-slate-950"
+        />
+      </div>
+
+      {/* Prettify Log Modal */}
+      <PrettifyModal
+        isOpen={showPrettify}
+        onClose={() => setShowPrettify(false)}
+        rawText={selectedText || lastSelectedTextRef.current}
       />
     </div>
   );
