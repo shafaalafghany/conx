@@ -105,6 +105,14 @@ export default function ConnectionList({
                 <span className="text-xs px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded flex-shrink-0">
                   {formatDbType(connection.dbType)}
                 </span>
+                {connection.dbType !== 'sqlite' && connection.hasPassword === false && (
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 rounded flex-shrink-0 font-medium"
+                    title="No password saved. Click Edit to enter password."
+                  >
+                    No password
+                  </span>
+                )}
               </div>
               <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0 ml-2">
                 {indicator.label}

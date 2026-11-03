@@ -37,43 +37,56 @@ export const TerminalTabs: React.FC<TerminalTabsProps> = ({
     );
   }
 
-  const activeSessionObj = sessions.find((s) => s.sessionID === activeSessionID);
-
   return (
     <div className="flex-1 flex flex-col min-h-0 h-full">
       {/* Tab Selector */}
-      <div className="flex items-center gap-1 mb-3 overflow-x-auto">
+      <div className="flex items-center gap-1.5 mb-3 overflow-x-auto">
         {sessions.map((s) => (
-          <button
+          <div
             key={s.sessionID}
             onClick={() => onSelectSession(s.sessionID)}
-            className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border transition-colors ${
+            className={`group flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border transition-colors cursor-pointer select-none ${
               activeSessionID === s.sessionID
                 ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-gray-300 dark:border-gray-600 shadow-sm'
                 : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-transparent hover:bg-gray-300 dark:hover:bg-gray-600'
             }`}
           >
-            <span className="w-2 h-2 rounded-full bg-green-500"></span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
             <span>{s.vmName}</span>
-          </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCloseSession(s.sessionID);
+              }}
+              className="ml-1 p-0.5 rounded hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              title="Close session"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         ))}
       </div>
 
-      {/* Active Terminal Container */}
-      {activeSessionObj && (
-        <div className="flex-1 min-h-[450px]">
-          <TerminalView
-            key={activeSessionObj.sessionID}
-            sessionID={activeSessionObj.sessionID}
-            vmID={activeSessionObj.vmID}
-            vmName={activeSessionObj.vmName}
-            host={activeSessionObj.host}
-            onClose={onCloseSession}
-            onSendInput={() => {}}
-            onResize={() => {}}
-          />
-        </div>
-      )}
+      {/* Terminal Viewports Container - Persistent background sessions */}
+      <div className="flex-1 min-h-0 relative">
+        {sessions.map((s) => (
+          <div
+            key={s.sessionID}
+            className={`h-full w-full min-h-0 ${activeSessionID === s.sessionID ? 'block' : 'hidden'}`}
+          >
+            <TerminalView
+              sessionID={s.sessionID}
+              vmID={s.vmID}
+              vmName={s.vmName}
+              host={s.host}
+              isActive={activeSessionID === s.sessionID}
+              onClose={onCloseSession}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

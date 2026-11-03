@@ -7,6 +7,8 @@ export interface ConnectionItem {
   host: string;
   port: number;
   username: string;
+  hasPassword?: boolean;
+  databaseName?: string;
   status: ConnectionStatus;
 }
 

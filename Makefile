@@ -30,6 +30,9 @@ help:
 	@printf '  %-25s %s\n' 'make clean' 'Remove build artifacts and compiled assets'
 	@printf '%s\n' ''
 
+GOPATH ?= $(shell go env GOPATH)
+WAILS  ?= $(shell which wails 2>/dev/null || echo $(GOPATH)/bin/wails)
+
 # Dependencies
 install: install-frontend
 	go mod download
@@ -44,25 +47,46 @@ install-wails:
 # Development
 dev-web:
 	@printf '%b\n' '${GREEN}Starting Conx Go API & SSH Gateway (:3333) + Vite Frontend (:5173)...${RESET}'
-	@go run ./cmd/server & SERVER_PID=$$!; \
+	@mkdir -p build/bin
+	@go build -o build/bin/conx-server ./cmd/server
+	@./build/bin/conx-server & SERVER_PID=$$!; \
 	trap 'kill $$SERVER_PID 2>/dev/null' EXIT INT TERM; \
+	sleep 0.5; \
 	cd frontend && npm run dev
 
 dev:
-	wails dev
+	$(WAILS) dev
 
 # Build
 build-frontend:
 	cd frontend && npm run build
 
 build: build-frontend
-	wails build
+	$(WAILS) build
 
-build-dmg: build-frontend
-	wails build -platform darwin/arm64
+build-app: build-frontend
+	$(WAILS) build -platform darwin/arm64
+
+build-dmg: build-app
+	@printf '%b\n' '${GREEN}Packaging macOS DMG installer...${RESET}'
+	@rm -rf build/dmg-stage build/bin/conx.dmg
+	@mkdir -p build/dmg-stage
+	@cp -r build/bin/conx.app build/dmg-stage/
+	@ln -s /Applications build/dmg-stage/Applications
+	@hdiutil create -volname "Conx" -srcfolder build/dmg-stage -ov -format UDZO build/bin/conx.dmg
+	@rm -rf build/dmg-stage
+	@printf '%b\n' '${GREEN}DMG built successfully: build/bin/conx.dmg${RESET}'
 
 build-dmg-universal: build-frontend
-	wails build -platform darwin/universal
+	$(WAILS) build -platform darwin/universal
+	@printf '%b\n' '${GREEN}Packaging Universal macOS DMG installer...${RESET}'
+	@rm -rf build/dmg-stage build/bin/conx-universal.dmg
+	@mkdir -p build/dmg-stage
+	@cp -r build/bin/conx.app build/dmg-stage/
+	@ln -s /Applications build/dmg-stage/Applications
+	@hdiutil create -volname "Conx" -srcfolder build/dmg-stage -ov -format UDZO build/bin/conx-universal.dmg
+	@rm -rf build/dmg-stage
+	@printf '%b\n' '${GREEN}Universal DMG built successfully: build/bin/conx-universal.dmg${RESET}'
 
 # Quality & Maintenance
 check:

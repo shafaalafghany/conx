@@ -28,6 +28,7 @@ type DatabaseConnection struct {
 	DatabaseName      string    `json:"databaseName"`
 	Username          string    `json:"username"`
 	EncryptedPassword string    `json:"encryptedPassword,omitempty"`
+	HasPassword       bool      `json:"hasPassword"`
 	SSLMode           string    `json:"sslMode"`
 	CreatedAt         time.Time `json:"createdAt"`
 }

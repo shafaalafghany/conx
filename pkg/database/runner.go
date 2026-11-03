@@ -4,10 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 )
@@ -37,24 +38,39 @@ func (r *Runner) buildDSN(conn DatabaseConnection, password string, overrideDb s
 		if dbName == "" {
 			dbName = "postgres"
 		}
-		dsn = fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
-			conn.Username, password, conn.Host, conn.Port, dbName, ssl)
-		return driver, dsn, nil
+		port := conn.Port
+		if port == 0 {
+			port = 5432
+		}
+		u := &url.URL{
+			Scheme: "postgres",
+			User:   url.UserPassword(conn.Username, password),
+			Host:   fmt.Sprintf("%s:%d", conn.Host, port),
+			Path:   "/" + dbName,
+		}
+		q := u.Query()
+		q.Set("sslmode", ssl)
+		q.Set("connect_timeout", "5")
+		u.RawQuery = q.Encode()
+		return driver, u.String(), nil
 
 	case "mysql", "mariadb":
-		driver = "mysql"
 		port := conn.Port
 		if port == 0 {
 			port = 3306
 		}
-		if dbName != "" {
-			dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?timeout=5s&parseTime=true",
-				conn.Username, password, conn.Host, port, dbName)
-		} else {
-			dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/?timeout=5s&parseTime=true",
-				conn.Username, password, conn.Host, port)
-		}
-		return driver, dsn, nil
+		cfg := mysql.NewConfig()
+		cfg.User = conn.Username
+		cfg.Passwd = password
+		cfg.Net = "tcp"
+		cfg.Addr = fmt.Sprintf("%s:%d", conn.Host, port)
+		cfg.DBName = dbName
+		cfg.Timeout = 5 * time.Second
+		cfg.ParseTime = true
+		cfg.AllowNativePasswords = true
+		cfg.AllowCleartextPasswords = true
+		cfg.AllowFallbackToPlaintext = true
+		return "mysql", cfg.FormatDSN(), nil
 
 	case "sqlite", "sqlite3":
 		driver = "sqlite"
