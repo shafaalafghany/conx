@@ -105,6 +105,30 @@ func (s *Storage) migrate() error {
 		executed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (connection_id) REFERENCES databases(id) ON DELETE CASCADE
 	);
+
+	CREATE TABLE IF NOT EXISTS redis_connections (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		host TEXT NOT NULL,
+		port INTEGER NOT NULL DEFAULT 6379,
+		username TEXT,
+		encrypted_password TEXT,
+		default_db INTEGER NOT NULL DEFAULT 0,
+		use_tls INTEGER NOT NULL DEFAULT 0,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS redis_command_history (
+		id TEXT PRIMARY KEY,
+		connection_id TEXT NOT NULL,
+		db_index INTEGER DEFAULT 0,
+		command_text TEXT NOT NULL,
+		status TEXT NOT NULL,
+		error_message TEXT,
+		execution_time_ms INTEGER DEFAULT 0,
+		executed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (connection_id) REFERENCES redis_connections(id) ON DELETE CASCADE
+	);
 	`
 	_, err := s.db.Exec(schema)
 	return err

@@ -7,6 +7,7 @@ import (
 	"conx/pkg/crypto"
 	"conx/pkg/database"
 	"conx/pkg/monitor"
+	"conx/pkg/redisclient"
 
 	"github.com/gorilla/websocket"
 )
@@ -23,6 +24,7 @@ type Server struct {
 	storage        *database.Storage
 	vault          *crypto.Vault
 	runner         *database.Runner
+	redisRunner    *redisclient.Runner
 	poller         *monitor.Poller
 	connectedMu    sync.RWMutex
 	connectedConns map[string]bool

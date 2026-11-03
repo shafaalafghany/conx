@@ -11,6 +11,7 @@ import (
 	"conx/pkg/crypto"
 	"conx/pkg/database"
 	"conx/pkg/monitor"
+	"conx/pkg/redisclient"
 )
 
 func main() {
@@ -30,6 +31,7 @@ func main() {
 
 	vault := crypto.NewVault("conx-local-workstation-secret-seed")
 	runner := database.NewRunner()
+	redisRunner := redisclient.NewRunner()
 	poller := monitor.NewPoller(context.Background(), storage, nil)
 	poller.Start()
 	defer poller.Stop()
@@ -38,6 +40,7 @@ func main() {
 		storage:        storage,
 		vault:          vault,
 		runner:         runner,
+		redisRunner:    redisRunner,
 		poller:         poller,
 		connectedConns: make(map[string]bool),
 	}
@@ -53,6 +56,8 @@ func main() {
 	mux.HandleFunc("/api/databases/", srv.handleDatabaseSubroutes)
 	mux.HandleFunc("/api/databases/test", srv.handleDatabaseTest)
 	mux.HandleFunc("/api/databases/query", srv.handleDatabaseQuery)
+	mux.HandleFunc("/api/redis", srv.handleRedisConnections)
+	mux.HandleFunc("/api/redis/", srv.handleRedisSubroutes)
 
 	// WebSocket Terminal Bridge
 	mux.HandleFunc("/ws/ssh", srv.handleSSHWebSocket)

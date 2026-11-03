@@ -267,4 +267,329 @@ export const api = {
     a.click();
     document.body.removeChild(a);
   },
+
+  // --- Redis Management ---
+  listRedisConnections: async () => {
+    if (isWails()) {
+      return getWailsApp().ListRedisConnections();
+    }
+    const res = await fetch('/api/redis');
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  saveRedisConnection: async (conn: any, password = '') => {
+    if (isWails()) {
+      return getWailsApp().SaveRedisConnection(conn, password);
+    }
+    const res = await fetch('/api/redis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...conn, password }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  deleteRedisConnection: async (id: string) => {
+    if (isWails()) {
+      return getWailsApp().DeleteRedisConnection(id);
+    }
+    const res = await fetch(`/api/redis?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  testRedisConnection: async (conn: any, password = '') => {
+    if (isWails()) {
+      return getWailsApp().TestRedisConnection(conn, password);
+    }
+    const res = await fetch('/api/redis/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...conn, password }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Connection failed');
+    }
+    return data.message || 'Connected!';
+  },
+
+  connectRedis: async (id: string) => {
+    if (isWails()) {
+      const conns = await getWailsApp().ListRedisConnections();
+      const target = (conns || []).find((c: any) => c.id === id);
+      if (!target) throw new Error('Redis profile not found');
+      await getWailsApp().TestRedisConnection(target, '');
+      return { status: 'connected' };
+    }
+    const res = await fetch(`/api/redis/${encodeURIComponent(id)}/connect`, { method: 'POST' });
+    if (!res.ok) {
+      throw new Error((await res.text()) || 'Failed to connect');
+    }
+    return res.json();
+  },
+
+  disconnectRedis: async (id: string) => {
+    if (isWails()) {
+      return { status: 'disconnected' };
+    }
+    const res = await fetch(`/api/redis/${encodeURIComponent(id)}/disconnect`, { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  scanRedisKeys: async (
+    connectionId: string,
+    dbIndex: number,
+    cursor = 0,
+    pattern = '*',
+    keyType = '',
+    count = 250
+  ) => {
+    if (isWails()) {
+      return getWailsApp().ScanRedisKeys(connectionId, dbIndex, cursor, pattern, keyType, count);
+    }
+    const res = await fetch('/api/redis/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ connectionId, dbIndex, cursor, pattern, keyType, count }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  getRedisKeyDetail: async (connectionId: string, dbIndex: number, key: string) => {
+    if (isWails()) {
+      return getWailsApp().GetRedisKeyDetail(connectionId, dbIndex, key);
+    }
+    const params = new URLSearchParams({
+      connectionId,
+      dbIndex: String(dbIndex),
+      key,
+    });
+    const res = await fetch(`/api/redis/key?${params.toString()}`);
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  setRedisKey: async (connectionId: string, dbIndex: number, payload: any) => {
+    if (isWails()) {
+      return getWailsApp().SetRedisKey(connectionId, dbIndex, payload);
+    }
+    const res = await fetch('/api/redis/key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ connectionId, dbIndex, payload }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  deleteRedisKey: async (connectionId: string, dbIndex: number, key: string) => {
+    if (isWails()) {
+      return getWailsApp().DeleteRedisKey(connectionId, dbIndex, key);
+    }
+    const params = new URLSearchParams({
+      connectionId,
+      dbIndex: String(dbIndex),
+      key,
+    });
+    const res = await fetch(`/api/redis/key?${params.toString()}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  updateRedisString: async (connectionId: string, dbIndex: number, key: string, value: string) => {
+    if (isWails()) {
+      return getWailsApp().UpdateRedisString(connectionId, dbIndex, key, value);
+    }
+    const res = await fetch('/api/redis/key/string', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ connectionId, dbIndex, key, value }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  setRedisHashField: async (
+    connectionId: string,
+    dbIndex: number,
+    key: string,
+    oldField: string,
+    field: string,
+    value: string
+  ) => {
+    if (isWails()) {
+      return getWailsApp().SetRedisHashField(connectionId, dbIndex, key, oldField, field, value);
+    }
+    const res = await fetch('/api/redis/key/hash', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ connectionId, dbIndex, key, oldField, field, value }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  deleteRedisHashField: async (connectionId: string, dbIndex: number, key: string, field: string) => {
+    if (isWails()) {
+      return getWailsApp().DeleteRedisHashField(connectionId, dbIndex, key, field);
+    }
+    const res = await fetch('/api/redis/key/hash', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ connectionId, dbIndex, key, field }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  pushRedisListValue: async (
+    connectionId: string,
+    dbIndex: number,
+    key: string,
+    value: string,
+    position: 'head' | 'tail' = 'tail'
+  ) => {
+    if (isWails()) {
+      return getWailsApp().PushRedisListValue(connectionId, dbIndex, key, value, position);
+    }
+    const res = await fetch('/api/redis/key/list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'push', connectionId, dbIndex, key, value, position }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  updateRedisListValue: async (
+    connectionId: string,
+    dbIndex: number,
+    key: string,
+    index: number,
+    value: string
+  ) => {
+    if (isWails()) {
+      return getWailsApp().UpdateRedisListValue(connectionId, dbIndex, key, index, value);
+    }
+    const res = await fetch('/api/redis/key/list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update', connectionId, dbIndex, key, index, value }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  deleteRedisListIndex: async (connectionId: string, dbIndex: number, key: string, index: number) => {
+    if (isWails()) {
+      return getWailsApp().DeleteRedisListIndex(connectionId, dbIndex, key, index);
+    }
+    const res = await fetch('/api/redis/key/list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', connectionId, dbIndex, key, index }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  addRedisSetMember: async (connectionId: string, dbIndex: number, key: string, member: string) => {
+    if (isWails()) {
+      return getWailsApp().AddRedisSetMember(connectionId, dbIndex, key, member);
+    }
+    const res = await fetch('/api/redis/key/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'add', connectionId, dbIndex, key, member }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  removeRedisSetMember: async (connectionId: string, dbIndex: number, key: string, member: string) => {
+    if (isWails()) {
+      return getWailsApp().RemoveRedisSetMember(connectionId, dbIndex, key, member);
+    }
+    const res = await fetch('/api/redis/key/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'remove', connectionId, dbIndex, key, member }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  addRedisZSetMember: async (
+    connectionId: string,
+    dbIndex: number,
+    key: string,
+    member: string,
+    score: number
+  ) => {
+    if (isWails()) {
+      return getWailsApp().AddRedisZSetMember(connectionId, dbIndex, key, member, score);
+    }
+    const res = await fetch('/api/redis/key/zset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'add', connectionId, dbIndex, key, member, score }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  removeRedisZSetMember: async (connectionId: string, dbIndex: number, key: string, member: string) => {
+    if (isWails()) {
+      return getWailsApp().RemoveRedisZSetMember(connectionId, dbIndex, key, member);
+    }
+    const res = await fetch('/api/redis/key/zset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'remove', connectionId, dbIndex, key, member }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  updateRedisKeyTTL: async (connectionId: string, dbIndex: number, key: string, ttlSeconds: number) => {
+    if (isWails()) {
+      return getWailsApp().UpdateRedisKeyTTL(connectionId, dbIndex, key, ttlSeconds);
+    }
+    const res = await fetch('/api/redis/key/ttl', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ connectionId, dbIndex, key, ttlSeconds }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  executeRedisCommand: async (connectionId: string, dbIndex: number, command: string) => {
+    if (isWails()) {
+      return getWailsApp().ExecuteRedisCommand(connectionId, dbIndex, command);
+    }
+    const res = await fetch('/api/redis/command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ connectionId, dbIndex, command }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  getRedisCommandHistory: async (connectionId: string) => {
+    if (isWails()) {
+      return getWailsApp().GetRedisCommandHistory(connectionId);
+    }
+    const res = await fetch(`/api/redis/${encodeURIComponent(connectionId)}/history`);
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
 };

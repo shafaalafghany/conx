@@ -109,6 +109,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </svg>
           {!sidebarCollapsed && <span>Database Management</span>}
         </button>
+
+        <button
+          onClick={() => onSelectTab('redis')}
+          className={`w-full flex items-center text-sm font-medium rounded-md transition-colors ${
+            sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'
+          } ${
+            activeTab === 'redis'
+              ? 'text-gray-900 dark:text-gray-100 bg-gray-200 dark:bg-gray-700'
+              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700/60'
+          }`}
+          title="Redis Management"
+        >
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 3L3 7.5 12 12l9-4.5L12 3zm-9 9l9 4.5 9-4.5M3 16.5L12 21l9-4.5"
+            />
+          </svg>
+          {!sidebarCollapsed && <span>Redis Management</span>}
+        </button>
       </nav>
 
       {/* Bottom Sidebar - Security Vault */}

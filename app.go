@@ -11,6 +11,7 @@ import (
 	"conx/pkg/crypto"
 	"conx/pkg/database"
 	"conx/pkg/monitor"
+	"conx/pkg/redisclient"
 	"conx/pkg/ssh"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -18,12 +19,13 @@ import (
 
 // App struct
 type App struct {
-	ctx        context.Context
-	storage    *database.Storage
-	vault      *crypto.Vault
-	sshManager *ssh.Manager
-	dbRunner   *database.Runner
-	poller     *monitor.Poller
+	ctx         context.Context
+	storage     *database.Storage
+	vault       *crypto.Vault
+	sshManager  *ssh.Manager
+	dbRunner    *database.Runner
+	redisRunner *redisclient.Runner
+	poller      *monitor.Poller
 }
 
 // SystemInfo represents basic host runtime info
@@ -65,6 +67,9 @@ func (a *App) startup(ctx context.Context) {
 
 	// Initialize Database Query Runner
 	a.dbRunner = database.NewRunner()
+
+	// Initialize Redis Runner
+	a.redisRunner = redisclient.NewRunner()
 
 	// Initialize SSH Session Manager with Wails Event streaming bridge
 	a.sshManager = ssh.NewManager(func(sessionID string, chunk string) {
