@@ -76,3 +76,29 @@ type SavedQuery struct {
 	ConnectionID string    `json:"connectionId"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
+
+// RedisConnection represents a target Redis server connection profile
+type RedisConnection struct {
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	Host              string    `json:"host"`
+	Port              int       `json:"port"`
+	Username          string    `json:"username"`
+	EncryptedPassword string    `json:"encryptedPassword,omitempty"`
+	HasPassword       bool      `json:"hasPassword"`
+	DefaultDB         int       `json:"defaultDb"`
+	UseTLS            bool      `json:"useTls"`
+	CreatedAt         time.Time `json:"createdAt"`
+}
+
+// RedisCommandHistoryEntry represents an executed Redis CLI command record
+type RedisCommandHistoryEntry struct {
+	ID              string `json:"id"`
+	ConnectionID    string `json:"connectionId"`
+	DBIndex         int    `json:"dbIndex"`
+	CommandText     string `json:"commandText"`
+	Status          string `json:"status"` // "success" or "error"
+	ErrorMessage    string `json:"errorMessage,omitempty"`
+	ExecutionTimeMs int64  `json:"executionTimeMs"`
+	ExecutedAt      string `json:"executedAt"`
+}

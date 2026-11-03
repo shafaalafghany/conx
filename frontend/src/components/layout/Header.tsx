@@ -9,6 +9,7 @@ const tabTitles: Record<NavigationTab, string> = {
   vms: 'Virtual Machines',
   terminal: 'SSH Terminal',
   database: 'Database Management',
+  redis: 'Redis Management',
   vault: 'Security Vault',
 };
 

@@ -8,6 +8,7 @@ import { EditVMModal } from './components/vm/EditVMModal';
 import { TerminalTabs } from './components/terminal/TerminalTabs';
 import { VaultView } from './components/vault/VaultView';
 import { QueryConsole } from './components/QueryConsole';
+import { RedisManagementPage } from './components/RedisManagementPage';
 import { api } from './api/client';
 import type { VM, ActiveSession, AddVMFormData, NavigationTab } from './types';
 
@@ -205,7 +206,7 @@ export default function App() {
         {/* Tab Body */}
         <main
           className={`flex-1 p-4 md:p-6 ${
-            activeTab === 'terminal' || activeTab === 'database'
+            activeTab === 'terminal' || activeTab === 'database' || activeTab === 'redis'
               ? 'overflow-hidden flex flex-col min-h-0'
               : 'overflow-auto'
           }`}
@@ -234,8 +235,14 @@ export default function App() {
           )}
 
           {activeTab === 'database' && (
-            <div className="h-full flex flex-col">
+            <div className="h-full flex flex-col min-h-0">
               <QueryConsole />
+            </div>
+          )}
+
+          {activeTab === 'redis' && (
+            <div className="h-full flex flex-col min-h-0">
+              <RedisManagementPage />
             </div>
           )}
 
