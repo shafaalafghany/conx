@@ -194,6 +194,8 @@ export function DatabaseManagementPage() {
         host: c.host,
         port: c.port,
         username: c.username,
+        databaseName: c.databaseName || '',
+        hasPassword: c.hasPassword !== undefined ? !!c.hasPassword : (c.encryptedPassword ? c.encryptedPassword.length > 0 : false),
         status: (c.status as any) || 'disconnected',
       }));
       setConnections(loadedConnections);
@@ -223,7 +225,8 @@ export function DatabaseManagementPage() {
       const dbs = await api.getDatabases(connId);
       setConnectionDatabases((prev) => ({ ...prev, [connId]: dbs }));
     } catch (err: any) {
-      setApiError(err.message || 'Failed to list databases');
+      const msg = err?.message || (typeof err === 'string' ? err : 'Failed to list databases');
+      setApiError(msg);
     } finally {
       setTreeLoading((prev) => ({ ...prev, [connId]: false }));
     }
@@ -239,6 +242,8 @@ export function DatabaseManagementPage() {
       setTables((prev) => ({ ...prev, [key]: tableList }));
     } catch (err: any) {
       setAccessDenied((prev) => [...prev, key]);
+      const msg = err?.message || (typeof err === 'string' ? err : `Failed to load tables for ${dbName}`);
+      setApiError(msg);
     } finally {
       setTreeLoading((prev) => ({ ...prev, [key]: false }));
     }
@@ -253,7 +258,8 @@ export function DatabaseManagementPage() {
       const cols = await api.getTableColumns(connId, dbName, tableName);
       setTableStructure((prev) => ({ ...prev, [key]: cols }));
     } catch (err: any) {
-      setApiError(err.message || 'Failed to load columns');
+      const msg = err?.message || (typeof err === 'string' ? err : `Failed to load columns for ${tableName}`);
+      setApiError(msg);
     } finally {
       setTreeLoading((prev) => ({ ...prev, [key]: false }));
     }
@@ -283,6 +289,7 @@ export function DatabaseManagementPage() {
 
   // Connect handler
   const handleConnect = useCallback(async (id: string) => {
+    setApiError(null);
     try {
       await api.connectDatabase(id);
       setConnections((prev) =>
@@ -291,7 +298,8 @@ export function DatabaseManagementPage() {
       setActiveConnectionId(id);
       handleExpandConnection(id);
     } catch (err: any) {
-      setApiError(err.message || 'Failed to connect');
+      const msg = err?.message || (typeof err === 'string' ? err : 'Failed to connect');
+      setApiError(msg);
     }
   }, [handleExpandConnection]);
 
@@ -303,7 +311,8 @@ export function DatabaseManagementPage() {
         prev.map((c) => (c.id === id ? { ...c, status: 'disconnected' } : c))
       );
     } catch (err: any) {
-      setApiError(err.message || 'Failed to disconnect');
+      const msg = err?.message || (typeof err === 'string' ? err : 'Failed to disconnect');
+      setApiError(msg);
     }
   }, []);
 
@@ -317,7 +326,8 @@ export function DatabaseManagementPage() {
         setActiveConnectionId(null);
       }
     } catch (err: any) {
-      setApiError(err.message || 'Failed to delete connection');
+      const msg = err?.message || (typeof err === 'string' ? err : 'Failed to delete connection');
+      setApiError(msg);
     }
   }, [activeConnectionId]);
 
@@ -329,23 +339,25 @@ export function DatabaseManagementPage() {
 
   // Connection form submit
   const handleConnectionFormSubmit = useCallback(async (formData: ConnectionFormData) => {
+    setApiError(null);
     try {
       const payload = {
         id: editConnectionId || '',
-        name: formData.label,
+        name: formData.label || `${formData.host}:${formData.port}`,
         type: formData.dbType,
         host: formData.host,
         port: formData.port,
         databaseName: formData.databaseName || '',
         username: formData.username,
-        sslMode: formData.sslMode || 'disable',
+        sslMode: 'disable',
       };
       await api.saveDatabase(payload, formData.password);
       setShowConnectionForm(false);
       setEditConnectionId(null);
       await fetchConnections();
     } catch (err: any) {
-      setApiError(err.message || 'Failed to save connection');
+      const msg = err?.message || (typeof err === 'string' ? err : 'Failed to save connection');
+      setApiError(msg);
     }
   }, [editConnectionId, fetchConnections]);
 
@@ -752,11 +764,14 @@ export function DatabaseManagementPage() {
   const editingConn = connections.find((c) => c.id === editConnectionId);
   const initialFormData = editingConn
     ? {
+        id: editingConn.id,
         dbType: (editingConn.dbType === 'postgres' ? 'postgresql' : editingConn.dbType as DatabaseType) || 'mysql',
         label: editingConn.label || '',
         host: editingConn.host,
         port: editingConn.port,
         username: editingConn.username,
+        databaseName: (editingConn as any).databaseName || '',
+        hasPassword: editingConn.hasPassword,
       }
     : undefined;
 

@@ -25,6 +25,7 @@ type ConnectionResponse struct {
 	DatabaseName string    `json:"databaseName"`
 	Username     string    `json:"username"`
 	SSLMode      string    `json:"sslMode"`
+	HasPassword  bool      `json:"hasPassword"`
 	Status       string    `json:"status"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
@@ -60,6 +61,7 @@ func (s *Server) handleDatabases(w http.ResponseWriter, r *http.Request) {
 				DatabaseName: c.DatabaseName,
 				Username:     c.Username,
 				SSLMode:      c.SSLMode,
+				HasPassword:  c.HasPassword,
 				Status:       status,
 				CreatedAt:    c.CreatedAt,
 			})
@@ -84,6 +86,16 @@ func (s *Server) handleDatabases(w http.ResponseWriter, r *http.Request) {
 		conn := req.DatabaseConnection
 		if conn.ID == "" {
 			conn.ID = uuid.NewString()
+		} else {
+			existing, err := s.storage.GetDatabase(conn.ID)
+			if err == nil && existing != nil {
+				if req.Password == "" && conn.EncryptedPassword == "" {
+					conn.EncryptedPassword = existing.EncryptedPassword
+				}
+				if conn.DatabaseName == "" && existing.DatabaseName != "" {
+					conn.DatabaseName = existing.DatabaseName
+				}
+			}
 		}
 		if conn.Name == "" && req.Label != "" {
 			conn.Name = req.Label
@@ -455,9 +467,28 @@ func (s *Server) handleDatabaseTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	password := req.Password
-	if password == "" && req.EncryptedPassword != "" {
-		dec, _ := s.vault.Decrypt(req.EncryptedPassword)
-		password = dec
+	if password == "" {
+		enc := req.EncryptedPassword
+		if enc == "" && req.ID != "" {
+			existing, err := s.storage.GetDatabase(req.ID)
+			if err == nil && existing != nil {
+				enc = existing.EncryptedPassword
+			}
+		}
+		if enc != "" {
+			dec, _ := s.vault.Decrypt(enc)
+			password = dec
+		}
+	}
+
+	dbType := strings.ToLower(req.Type)
+	if dbType != "sqlite" && dbType != "sqlite3" && strings.TrimSpace(password) == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   fmt.Sprintf("no password saved or provided for user '%s'. Please enter your password", req.Username),
+		})
+		return
 	}
 
 	if err := s.runner.TestConnection(req.DatabaseConnection, password); err != nil {

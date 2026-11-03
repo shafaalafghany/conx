@@ -10,6 +10,7 @@ export interface DatabaseConnection {
   databaseName: string;
   username: string;
   sslMode: string;
+  hasPassword?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -21,6 +22,8 @@ export interface ConnectionItem {
   host: string;
   port: number;
   username: string;
+  hasPassword?: boolean;
+  databaseName?: string;
   status: ConnectionStatus;
 }
 
@@ -77,11 +80,13 @@ export interface ConnectionFormData {
 }
 
 export interface ConnectionFormInitialData {
+  id?: string;
   dbType: DatabaseType;
   host: string;
   port: number;
   username: string;
   label?: string;
   databaseName?: string;
+  hasPassword?: boolean;
   sslMode?: string;
 }

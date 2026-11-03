@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -174,6 +175,7 @@ func (s *Storage) ListDatabases() ([]DatabaseConnection, error) {
 			return nil, err
 		}
 		db.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+		db.HasPassword = strings.TrimSpace(db.EncryptedPassword) != ""
 		dbs = append(dbs, db)
 	}
 	return dbs, nil
@@ -213,6 +215,7 @@ func (s *Storage) GetDatabase(id string) (*DatabaseConnection, error) {
 		return nil, err
 	}
 	db.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+	db.HasPassword = strings.TrimSpace(db.EncryptedPassword) != ""
 	return &db, nil
 }
 

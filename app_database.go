@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"conx/pkg/database"
@@ -26,6 +27,17 @@ func (a *App) SaveDatabase(conn database.DatabaseConnection, rawPassword string)
 
 	if conn.ID == "" {
 		conn.ID = uuid.NewString()
+	} else {
+		// If editing an existing profile and no new password provided, preserve existing encrypted password
+		existing, err := a.storage.GetDatabase(conn.ID)
+		if err == nil && existing != nil {
+			if rawPassword == "" && conn.EncryptedPassword == "" {
+				conn.EncryptedPassword = existing.EncryptedPassword
+			}
+			if conn.DatabaseName == "" && existing.DatabaseName != "" {
+				conn.DatabaseName = existing.DatabaseName
+			}
+		}
 	}
 
 	if rawPassword != "" && a.vault != nil {
@@ -34,6 +46,10 @@ func (a *App) SaveDatabase(conn database.DatabaseConnection, rawPassword string)
 			return fmt.Errorf("failed to encrypt db password: %w", err)
 		}
 		conn.EncryptedPassword = encrypted
+	}
+
+	if conn.Name == "" {
+		conn.Name = fmt.Sprintf("%s:%d", conn.Host, conn.Port)
 	}
 
 	return a.storage.SaveDatabase(conn)
@@ -54,11 +70,25 @@ func (a *App) TestDatabaseConnection(conn database.DatabaseConnection, rawPasswo
 	}
 
 	password := rawPassword
-	if password == "" && conn.EncryptedPassword != "" && a.vault != nil {
-		decrypted, err := a.vault.Decrypt(conn.EncryptedPassword)
-		if err == nil {
-			password = decrypted
+	if password == "" {
+		encPass := conn.EncryptedPassword
+		if encPass == "" && conn.ID != "" && a.storage != nil {
+			existing, err := a.storage.GetDatabase(conn.ID)
+			if err == nil && existing != nil {
+				encPass = existing.EncryptedPassword
+			}
 		}
+		if encPass != "" && a.vault != nil {
+			decrypted, err := a.vault.Decrypt(encPass)
+			if err == nil {
+				password = decrypted
+			}
+		}
+	}
+
+	dbType := strings.ToLower(conn.Type)
+	if dbType != "sqlite" && dbType != "sqlite3" && strings.TrimSpace(password) == "" {
+		return "", fmt.Errorf("no password saved or provided for user '%s'. Please click 'Edit' to enter your password", conn.Username)
 	}
 
 	if err := a.dbRunner.TestConnection(conn, password); err != nil {
@@ -97,6 +127,11 @@ func (a *App) ExecuteDatabaseQuery(connID string, query string) (*database.Query
 		if err == nil {
 			password = decrypted
 		}
+	}
+
+	dbType := strings.ToLower(target.Type)
+	if dbType != "sqlite" && dbType != "sqlite3" && strings.TrimSpace(password) == "" {
+		return nil, fmt.Errorf("no password saved for user '%s'. Please click 'Edit' to enter your password", target.Username)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -149,6 +184,10 @@ func (a *App) GetDatabaseDatabases(connID string) ([]string, error) {
 			password = decrypted
 		}
 	}
+	dbType := strings.ToLower(target.Type)
+	if dbType != "sqlite" && dbType != "sqlite3" && strings.TrimSpace(password) == "" {
+		return nil, fmt.Errorf("no password saved for user '%s'. Please click 'Edit' to enter your password", target.Username)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return a.dbRunner.GetDatabases(ctx, *target, password)
@@ -170,6 +209,10 @@ func (a *App) GetDatabaseTables(connID string, dbName string) ([]string, error) 
 			password = decrypted
 		}
 	}
+	dbType := strings.ToLower(target.Type)
+	if dbType != "sqlite" && dbType != "sqlite3" && strings.TrimSpace(password) == "" {
+		return nil, fmt.Errorf("no password saved for user '%s'. Please click 'Edit' to enter your password", target.Username)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return a.dbRunner.GetTables(ctx, *target, password, dbName)
@@ -190,6 +233,10 @@ func (a *App) GetDatabaseColumns(connID string, dbName string, tableName string)
 		if err == nil {
 			password = decrypted
 		}
+	}
+	dbType := strings.ToLower(target.Type)
+	if dbType != "sqlite" && dbType != "sqlite3" && strings.TrimSpace(password) == "" {
+		return nil, fmt.Errorf("no password saved for user '%s'. Please click 'Edit' to enter your password", target.Username)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
