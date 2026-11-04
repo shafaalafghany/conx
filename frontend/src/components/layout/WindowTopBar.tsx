@@ -11,6 +11,11 @@ export const WindowTopBar: React.FC<WindowTopBarProps> = ({
   onToggleCollapse,
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const isMacDesktop =
+    typeof window !== 'undefined' &&
+    Boolean((window as any).go) &&
+    typeof navigator !== 'undefined' &&
+    /Mac/i.test(navigator.userAgent);
 
   useEffect(() => {
     const checkFullscreen = async () => {
@@ -33,8 +38,8 @@ export const WindowTopBar: React.FC<WindowTopBarProps> = ({
       className="h-10 flex items-center justify-between px-3 select-none flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700/80 wails-drag"
     >
       <div className="flex items-center gap-1.5">
-        {/* Dedicated reserved space for macOS window buttons (🔴 🟡 🟢) only when not fullscreen */}
-        {!isFullscreen && <div className="w-[72px] h-full flex-shrink-0" />}
+        {/* Dedicated reserved space for macOS window buttons (🔴 🟡 🟢) only on macOS desktop when not fullscreen */}
+        {isMacDesktop && !isFullscreen && <div className="w-[72px] h-full flex-shrink-0" />}
 
         {/* Sidebar collapse/expand toggle button (Spotify style navigation position) */}
         <button
