@@ -260,7 +260,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       const timer = setTimeout(() => {
         try {
           fitAddonRef.current?.fit();
-          termInstance.current?.focus();
+          const term = termInstance.current;
+          if (term && term.cols > 0 && term.rows > 0) {
+            if (isWails() && wailsSessionIdRef.current) {
+              api.resizeTerminal(wailsSessionIdRef.current, term.cols, term.rows).catch(() => {});
+            } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+            }
+          }
+          term?.focus();
         } catch (e) {}
       }, 60);
       return () => clearTimeout(timer);
@@ -271,6 +279,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   useEffect(() => {
     if (!terminalRef.current) return;
 
+    let isDisposed = false;
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+
     const term = new Terminal({
       cursorBlink: true,
       cursorStyle: 'bar',
@@ -278,7 +289,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       theme: theme === 'light' ? lightTheme : darkTheme,
       allowTransparency: false,
-      convertEol: true,
     });
 
     const fitAddon = new FitAddon();
@@ -290,69 +300,170 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     const isNative = isWails();
 
-    // Initial sizing
-    setTimeout(() => {
+    // Sync PTY dimensions helper
+    const syncPtySize = (cols: number, rows: number) => {
+      if (isDisposed || cols <= 0 || rows <= 0) return;
+      if (isNative) {
+        if (wailsSessionIdRef.current) {
+          api.resizeTerminal(wailsSessionIdRef.current, cols, rows).catch(() => {});
+        }
+      } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'resize', cols, rows }));
+      }
+      if (onResize) onResize(sessionID, cols, rows);
+    };
+
+    // Fit terminal to container with direct DOM clientWidth/clientHeight fallback
+    const fitTerminal = (): { cols: number; rows: number } => {
+      const container = terminalRef.current;
+      if (!container || !termInstance.current || !fitAddonRef.current) {
+        return { cols: term.cols || 80, rows: term.rows || 24 };
+      }
+
       try {
-        fitAddon.fit();
+        fitAddonRef.current.fit();
       } catch (e) {}
-    }, 100);
 
-    // If running in Native Wails desktop mode
-    if (isNative) {
-      term.write(`\r\n\x1b[36m[Connecting to ${host} via SSH...]\x1b[0m\r\n`);
-      const cols = term.cols > 0 ? term.cols : 80;
-      const rows = term.rows > 0 ? term.rows : 24;
+      // Fallback if proposeDimensions failed because computed style was 'auto' or cell width was 0
+      const rect = container.getBoundingClientRect();
+      const width = container.clientWidth || rect.width;
+      const height = container.clientHeight || rect.height;
+      if (width > 100 && height > 50) {
+        const core = (term as any)._core;
+        const cellW = core?._renderService?.dimensions?.css?.cell?.width || 7.83;
+        const cellH = core?._renderService?.dimensions?.css?.cell?.height || 16;
+        const scrollBarW = 15;
+        const computedCols = Math.max(2, Math.floor((width - scrollBarW) / cellW));
+        const computedRows = Math.max(1, Math.floor(height / cellH));
 
-      api.startSSHSession(vmID, cols, rows)
-        .then((realSessionID) => {
-          wailsSessionIdRef.current = realSessionID;
-          term.write(`\x1b[32m[Connected to ${host}]\x1b[0m\r\n\r\n`);
-
-          const wailsRuntime = (window as any).runtime;
-          if (wailsRuntime && wailsRuntime.EventsOn) {
-            wailsRuntime.EventsOn(`terminal:output:${realSessionID}`, (chunk: string) => {
-              term.write(chunk);
-              checkPromptPath(chunk);
-            });
+        if (
+          (term.cols === 80 && computedCols !== 80) ||
+          Math.abs(term.cols - computedCols) > 2 ||
+          Math.abs(term.rows - computedRows) > 1
+        ) {
+          try {
+            const proposed = fitAddonRef.current.proposeDimensions();
+            if (proposed && proposed.cols > 0 && proposed.rows > 0 && !isNaN(proposed.cols) && !isNaN(proposed.rows)) {
+              if (term.cols !== proposed.cols || term.rows !== proposed.rows) {
+                term.resize(proposed.cols, proposed.rows);
+              }
+            } else {
+              term.resize(computedCols, computedRows);
+            }
+          } catch {
+            try {
+              term.resize(computedCols, computedRows);
+            } catch {}
           }
-        })
-        .catch((err) => {
-          console.error('[TerminalView] Native SSH start error:', err);
-          term.write(`\r\n\x1b[31m[SSH Connection Failed: ${err?.message || err}]\x1b[0m\r\n`);
-        });
-    } else {
-      // If running in browser mode (make dev-web), connect via WebSocket bridge
-      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${proto}//${window.location.host}/ws/ssh?vmId=${encodeURIComponent(vmID)}&cols=80&rows=24`;
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+        }
+      }
 
-      ws.onopen = () => {
-        term.write('\r\n\x1b[32m[Connected via Go SSH Gateway]\x1b[0m\r\n\r\n');
-        try {
-          fitAddon.fit();
-          ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-        } catch (e) {}
+      return {
+        cols: term.cols > 0 ? term.cols : 80,
+        rows: term.rows > 0 ? term.rows : 24,
       };
+    };
 
-      ws.onmessage = (event) => {
-        term.write(event.data);
-        checkPromptPath(event.data);
-      };
+    // Responsive fit & remote PTY resize handler
+    const doFitAndResize = () => {
+      if (isDisposed) return;
+      const { cols, rows } = fitTerminal();
+      syncPtySize(cols, rows);
+    };
 
-      ws.onerror = () => {
-        term.write('\r\n\x1b[31m[SSH Connection Failed - check server or credentials]\x1b[0m\r\n');
-      };
+    // Automatically notify remote PTY whenever xterm dimensions change
+    const resizeDisposable = term.onResize(({ cols, rows }) => {
+      syncPtySize(cols, rows);
+    });
 
-      ws.onclose = () => {
-        term.write('\r\n\x1b[33m[SSH Session Terminated]\x1b[0m\r\n');
-      };
-    }
+    // Wait one animation frame + layout tick so container dimensions are painted before requesting SSH PTY
+    const connectTimer = setTimeout(() => {
+      if (isDisposed) return;
+      const { cols: initialCols, rows: initialRows } = fitTerminal();
+      let firstPromptSynced = false;
+
+      if (isNative) {
+        term.write(`\r\n\x1b[36m[Connecting to ${host} via SSH...]\x1b[0m\r\n`);
+
+        api.startSSHSession(vmID, initialCols, initialRows)
+          .then((realSessionID) => {
+            if (isDisposed) {
+              api.closeSSHSession(realSessionID).catch(() => {});
+              return;
+            }
+            wailsSessionIdRef.current = realSessionID;
+
+            const wailsRuntime = (window as any).runtime;
+            if (wailsRuntime && wailsRuntime.EventsOn) {
+              wailsRuntime.EventsOn(`terminal:output:${realSessionID}`, (chunk: string) => {
+                term.write(chunk);
+                checkPromptPath(chunk);
+
+                // As soon as the remote shell outputs its first prompt ($ or #),
+                // bash/readline is initialized and ready for SIGWINCH window-change.
+                if (!firstPromptSynced && (chunk.includes('$') || chunk.includes('#'))) {
+                  firstPromptSynced = true;
+                  doFitAndResize();
+                  timers.push(setTimeout(doFitAndResize, 150));
+                }
+              });
+            }
+
+            term.write(`\x1b[32m[Connected to ${host}]\x1b[0m\r\n\r\n`);
+
+            // Sync terminal dimensions across shell startup stages
+            doFitAndResize();
+            timers.push(setTimeout(doFitAndResize, 150));
+            timers.push(setTimeout(doFitAndResize, 500));
+            timers.push(setTimeout(doFitAndResize, 1000));
+            timers.push(setTimeout(doFitAndResize, 2000));
+          })
+          .catch((err) => {
+            if (isDisposed) return;
+            console.error('[TerminalView] Native SSH start error:', err);
+            term.write(`\r\n\x1b[31m[SSH Connection Failed: ${err?.message || err}]\x1b[0m\r\n`);
+          });
+      } else {
+        // Browser mode (make dev-web): connect via WebSocket bridge
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${proto}//${window.location.host}/ws/ssh?vmId=${encodeURIComponent(vmID)}&cols=${initialCols}&rows=${initialRows}`;
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          term.write('\r\n\x1b[32m[Connected via Go SSH Gateway]\x1b[0m\r\n\r\n');
+          doFitAndResize();
+          timers.push(setTimeout(doFitAndResize, 150));
+          timers.push(setTimeout(doFitAndResize, 500));
+          timers.push(setTimeout(doFitAndResize, 1000));
+        };
+
+        ws.onmessage = (event) => {
+          const chunk = String(event.data || '');
+          term.write(chunk);
+          checkPromptPath(chunk);
+          if (!firstPromptSynced && (chunk.includes('$') || chunk.includes('#'))) {
+            firstPromptSynced = true;
+            doFitAndResize();
+            timers.push(setTimeout(doFitAndResize, 150));
+          }
+        };
+
+        ws.onerror = () => {
+          term.write('\r\n\x1b[31m[SSH Connection Failed - check server or credentials]\x1b[0m\r\n');
+        };
+
+        ws.onclose = () => {
+          term.write('\r\n\x1b[33m[SSH Session Terminated]\x1b[0m\r\n');
+        };
+      }
+    }, 50);
+    timers.push(connectTimer);
 
     // Keystroke handler (forward raw data directly to remote shell)
     const dataDisposable = term.onData((data) => {
       if (isNative) {
-        const targetId = wailsSessionIdRef.current || sessionID;
+        const targetId = wailsSessionIdRef.current;
         if (targetId) {
           api.sendTerminalInput(targetId, data).catch(() => {});
         }
@@ -371,25 +482,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     });
 
-    // Responsive fit & remote PTY resize handler
-    const doFitAndResize = () => {
-      if (fitAddonRef.current && termInstance.current) {
-        try {
-          fitAddonRef.current.fit();
-          const { cols, rows } = termInstance.current;
-          if (cols > 0 && rows > 0) {
-            const targetId = wailsSessionIdRef.current || sessionID;
-            if (isNative && targetId) {
-              api.resizeTerminal(targetId, cols, rows).catch(() => {});
-            } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({ type: 'resize', cols, rows }));
-            }
-            if (onResize) onResize(sessionID, cols, rows);
-          }
-        } catch (e) {}
-      }
-    };
-
     window.addEventListener('resize', doFitAndResize);
 
     // Observe container size changes (e.g. sidebar collapse, search bar toggle, fullscreen toggle)
@@ -402,10 +494,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     }
 
     return () => {
+      isDisposed = true;
+      timers.forEach((t) => clearTimeout(t));
       window.removeEventListener('resize', doFitAndResize);
       if (resizeObserver) {
         resizeObserver.disconnect();
       }
+      resizeDisposable.dispose();
       dataDisposable.dispose();
       selectionDisposable.dispose();
       if (wsRef.current) {
@@ -557,7 +652,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       )}
 
       {/* Terminal Viewport */}
-      <div className="flex-1 w-full min-h-0 overflow-hidden relative flex flex-col">
+      <div className="flex-1 w-full min-h-0 overflow-hidden relative flex flex-col px-3.5 py-2.5 bg-white dark:bg-slate-950">
         {selectedText && (
           <div className="absolute top-3 right-5 z-20">
             <button
@@ -575,7 +670,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
         <div
           ref={terminalRef}
-          className="flex-1 w-full min-h-0 overflow-hidden bg-white dark:bg-slate-950"
+          className="flex-1 w-full h-full min-h-0 overflow-hidden"
         />
       </div>
 

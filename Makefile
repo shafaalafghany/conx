@@ -72,6 +72,7 @@ build-app: build-frontend
 
 build-dmg: build-app
 	@printf '%b\n' '${GREEN}Packaging macOS DMG installer...${RESET}'
+	@codesign --force --deep --sign - build/bin/conx.app
 	@rm -rf build/dmg-stage build/bin/conx.dmg
 	@mkdir -p build/dmg-stage
 	@cp -r build/bin/conx.app build/dmg-stage/
@@ -83,6 +84,7 @@ build-dmg: build-app
 build-dmg-universal: build-frontend
 	$(WAILS) build -platform darwin/universal
 	@printf '%b\n' '${GREEN}Packaging Universal macOS DMG installer...${RESET}'
+	@codesign --force --deep --sign - build/bin/conx.app
 	@rm -rf build/dmg-stage build/bin/conx-universal.dmg
 	@mkdir -p build/dmg-stage
 	@cp -r build/bin/conx.app build/dmg-stage/

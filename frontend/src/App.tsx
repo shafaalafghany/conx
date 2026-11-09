@@ -224,7 +224,19 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'terminal' && (
+          {sessions.length > 0 && (
+            <div className={activeTab === 'terminal' ? 'flex-1 flex flex-col min-h-0 h-full' : 'hidden'}>
+              <TerminalTabs
+                sessions={sessions}
+                activeSessionID={activeTab === 'terminal' ? activeSessionID : null}
+                onSelectSession={setActiveSessionID}
+                onCloseSession={handleCloseSession}
+                onNavigateToVMs={() => setActiveTab('vms')}
+              />
+            </div>
+          )}
+
+          {activeTab === 'terminal' && sessions.length === 0 && (
             <TerminalTabs
               sessions={sessions}
               activeSessionID={activeSessionID}
