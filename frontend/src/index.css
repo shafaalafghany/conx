@@ -20,11 +20,10 @@
   --wails-draggable: no-drag;
 }
 
-/* xterm terminal viewport padding & smooth integration */
+/* xterm terminal viewport sizing & smooth integration */
 .terminal.xterm {
-  padding: 14px 18px;
   height: 100%;
-  box-sizing: border-box;
+  width: 100%;
 }
 
 .xterm .xterm-viewport {

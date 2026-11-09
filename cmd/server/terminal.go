@@ -163,6 +163,9 @@ func (s *Server) handleSSHWebSocket(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// WebSocket read -> SSH stdin write & resize
+	createdAt := time.Now()
+	lastCols := cols
+	lastRows := rows
 	for {
 		msgType, msgBytes, err := ws.ReadMessage()
 		if err != nil {
@@ -178,7 +181,15 @@ func (s *Server) handleSSHWebSocket(w http.ResponseWriter, r *http.Request) {
 					Rows int    `json:"rows"`
 				}
 				if jerr := json.Unmarshal(msgBytes, &resizeCmd); jerr == nil && resizeCmd.Cols > 0 && resizeCmd.Rows > 0 {
-					_ = session.WindowChange(resizeCmd.Rows, resizeCmd.Cols)
+					isInitial := time.Since(createdAt) < 4*time.Second
+					if isInitial || resizeCmd.Cols != lastCols || resizeCmd.Rows != lastRows {
+						lastCols = resizeCmd.Cols
+						lastRows = resizeCmd.Rows
+						if isInitial && resizeCmd.Cols > 2 {
+							_ = session.WindowChange(resizeCmd.Rows, resizeCmd.Cols-1)
+						}
+						_ = session.WindowChange(resizeCmd.Rows, resizeCmd.Cols)
+					}
 					continue
 				}
 			}
