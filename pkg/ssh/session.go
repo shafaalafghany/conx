@@ -18,6 +18,10 @@ type Session struct {
 	Session   *ssh.Session
 	Stdin     io.WriteCloser
 	Stdout    io.Reader
+	Cols      int
+	Rows      int
+	createdAt time.Time
+	sizeMu    sync.Mutex
 	cancel    context.CancelFunc
 	closeOnce sync.Once
 }
@@ -135,12 +139,15 @@ func (m *Manager) StartSession(opts ConnectOptions) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	sess := &Session{
-		ID:      opts.SessionID,
-		Client:  client,
-		Session: session,
-		Stdin:   stdin,
-		Stdout:  stdout,
-		cancel:  cancel,
+		ID:        opts.SessionID,
+		Client:    client,
+		Session:   session,
+		Stdin:     stdin,
+		Stdout:    stdout,
+		Cols:      cols,
+		Rows:      rows,
+		createdAt: time.Now(),
+		cancel:    cancel,
 	}
 
 	m.sessions[opts.SessionID] = sess
@@ -153,6 +160,10 @@ func (m *Manager) StartSession(opts ConnectOptions) error {
 
 // streamStdout reads from the SSH stdout pipe and pushes to the Wails event bus
 func (m *Manager) streamStdout(ctx context.Context, s *Session) {
+	// Brief delay so the frontend StartSSHSession promise resolves and registers
+	// its Wails EventsOn listener before the first shell banner/prompt chunk emits.
+	time.Sleep(50 * time.Millisecond)
+
 	buf := make([]byte, 4096)
 	for {
 		select {
@@ -193,6 +204,28 @@ func (m *Manager) Resize(sessionID string, cols int, rows int) error {
 
 	if !exists {
 		return fmt.Errorf("session %s not found", sessionID)
+	}
+
+	if cols <= 0 || rows <= 0 {
+		return nil
+	}
+
+	sess.sizeMu.Lock()
+	defer sess.sizeMu.Unlock()
+
+	isInitialPhase := time.Since(sess.createdAt) < 4*time.Second
+	if !isInitialPhase && sess.Cols == cols && sess.Rows == rows {
+		return nil
+	}
+
+	sess.Cols = cols
+	sess.Rows = rows
+
+	// During the initial shell startup phase, bounce cols-1 -> cols so the remote
+	// Linux kernel PTY (tty_do_resize) always sends SIGWINCH to bash/readline even
+	// if RequestPty already set the same dimensions before bash finished .bashrc.
+	if isInitialPhase && cols > 2 {
+		_ = sess.Session.WindowChange(rows, cols-1)
 	}
 
 	return sess.Session.WindowChange(rows, cols)

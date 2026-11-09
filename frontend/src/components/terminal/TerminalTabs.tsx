@@ -74,7 +74,11 @@ export const TerminalTabs: React.FC<TerminalTabsProps> = ({
         {sessions.map((s) => (
           <div
             key={s.sessionID}
-            className={`h-full w-full min-h-0 ${activeSessionID === s.sessionID ? 'block' : 'hidden'}`}
+            className={
+              activeSessionID === s.sessionID
+                ? 'absolute inset-0 flex flex-col min-h-0'
+                : 'hidden'
+            }
           >
             <TerminalView
               sessionID={s.sessionID}
