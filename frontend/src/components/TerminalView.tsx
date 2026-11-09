@@ -527,6 +527,25 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     }
   }, [theme]);
 
+  // Re-fit terminal whenever tab becomes active (e.g. switching back from Database/Redis or between terminal tabs)
+  useEffect(() => {
+    if (isActive && termInstance.current) {
+      const timer = setTimeout(() => {
+        try {
+          if (fitAddonRef.current) {
+            fitAddonRef.current.fit();
+          }
+          const term = termInstance.current;
+          const targetId = wailsSessionIdRef.current;
+          if (term && targetId && isWails()) {
+            api.resizeTerminal(targetId, term.cols, term.rows).catch(() => {});
+          }
+        } catch {}
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isActive]);
+
   const handleClear = () => {
     termInstance.current?.clear();
   };
