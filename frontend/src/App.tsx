@@ -224,39 +224,26 @@ export default function App() {
             />
           )}
 
-          {sessions.length > 0 && (
-            <div className={activeTab === 'terminal' ? 'flex-1 flex flex-col min-h-0 h-full' : 'hidden'}>
-              <TerminalTabs
-                sessions={sessions}
-                activeSessionID={activeTab === 'terminal' ? activeSessionID : null}
-                onSelectSession={setActiveSessionID}
-                onCloseSession={handleCloseSession}
-                onNavigateToVMs={() => setActiveTab('vms')}
-              />
-            </div>
-          )}
-
-          {activeTab === 'terminal' && sessions.length === 0 && (
+          {/* Terminal Tabs (kept mounted so SSH sessions & shell state persist across page switches) */}
+          <div className={activeTab === 'terminal' ? 'flex-1 flex flex-col min-h-0 h-full' : 'hidden'}>
             <TerminalTabs
               sessions={sessions}
-              activeSessionID={activeSessionID}
+              activeSessionID={activeTab === 'terminal' ? activeSessionID : null}
               onSelectSession={setActiveSessionID}
               onCloseSession={handleCloseSession}
               onNavigateToVMs={() => setActiveTab('vms')}
             />
-          )}
+          </div>
 
-          {activeTab === 'database' && (
-            <div className="h-full flex flex-col min-h-0">
-              <QueryConsole />
-            </div>
-          )}
+          {/* Database Management Page (kept mounted so open tables, query results, and edits persist) */}
+          <div className={activeTab === 'database' ? 'h-full flex flex-col min-h-0' : 'hidden'}>
+            <QueryConsole />
+          </div>
 
-          {activeTab === 'redis' && (
-            <div className="h-full flex flex-col min-h-0">
-              <RedisManagementPage />
-            </div>
-          )}
+          {/* Redis Management Page (kept mounted so keys, search, and active redis tabs persist) */}
+          <div className={activeTab === 'redis' ? 'h-full flex flex-col min-h-0' : 'hidden'}>
+            <RedisManagementPage />
+          </div>
 
           {activeTab === 'vault' && <VaultView />}
         </main>
