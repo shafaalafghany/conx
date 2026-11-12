@@ -614,4 +614,57 @@ export const api = {
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
+
+  // --- Settings Import / Export ---
+  exportSettings: async (
+    options = { includeVMs: true, includeDatabases: true, includeRedis: true }
+  ): Promise<string> => {
+    if (isWails()) {
+      return getWailsApp().ExportSettings(options);
+    }
+    const res = await fetch('/api/settings/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.text();
+  },
+
+  exportSettingsToFile: async (
+    options = { includeVMs: true, includeDatabases: true, includeRedis: true }
+  ): Promise<string> => {
+    if (isWails() && getWailsApp().ExportSettingsToFile) {
+      return getWailsApp().ExportSettingsToFile(options);
+    }
+    const rawJson = await api.exportSettings(options);
+    const blob = new Blob([rawJson], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `conx-settings-${dateStr}.json`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    return filename;
+  },
+
+  importSettings: async (
+    rawJson: string,
+    options = { includeVMs: true, includeDatabases: true, includeRedis: true, replaceExisting: false }
+  ): Promise<{ vmsImported: number; databasesImported: number; redisImported: number }> => {
+    if (isWails()) {
+      return getWailsApp().ImportSettings(rawJson, options);
+    }
+    const res = await fetch('/api/settings/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rawJson, options }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
 };
