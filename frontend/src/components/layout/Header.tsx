@@ -14,8 +14,19 @@ const tabTitles: Record<NavigationTab, string> = {
 };
 
 export const Header: React.FC<HeaderProps> = ({ activeTab }) => {
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('button, a, input, select, textarea, .wails-no-drag, [style*="--wails-draggable: no-drag"]')) {
+      return;
+    }
+    if (typeof window !== 'undefined' && (window as any).runtime?.WindowToggleMaximise) {
+      (window as any).runtime.WindowToggleMaximise();
+    }
+  };
+
   return (
     <header
+      onDoubleClick={handleDoubleClick}
       style={{ '--wails-draggable': 'drag' } as React.CSSProperties}
       className="h-12 flex items-center justify-between px-6 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 select-none flex-shrink-0 wails-drag"
     >

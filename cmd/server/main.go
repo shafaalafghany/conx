@@ -52,6 +52,7 @@ func main() {
 	mux.HandleFunc("/api/vms/", srv.handleVMs)
 	mux.HandleFunc("/api/vms/health", srv.handleVMHealth)
 	mux.HandleFunc("/api/vms/files", srv.handleVMFiles)
+	mux.HandleFunc("/api/vms/password", srv.handleVMPassword)
 	mux.HandleFunc("/api/databases", srv.handleDatabases)
 	mux.HandleFunc("/api/databases/", srv.handleDatabaseSubroutes)
 	mux.HandleFunc("/api/databases/test", srv.handleDatabaseTest)
