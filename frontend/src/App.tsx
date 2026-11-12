@@ -7,6 +7,7 @@ import { AddVMModal } from './components/vm/AddVMModal';
 import { EditVMModal } from './components/vm/EditVMModal';
 import { TerminalTabs } from './components/terminal/TerminalTabs';
 import { VaultView } from './components/vault/VaultView';
+import { SettingsBackupModal } from './components/vault/SettingsBackupPanel';
 import { QueryConsole } from './components/QueryConsole';
 import { RedisManagementPage } from './components/RedisManagementPage';
 import { api } from './api/client';
@@ -21,6 +22,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isProbing, setIsProbing] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [editVm, setEditVm] = useState<VM | null>(null);
 
   // Active terminal sessions
@@ -56,7 +58,13 @@ export default function App() {
       });
     }
 
+    const handleSettingsImported = () => {
+      loadVMs();
+    };
+    window.addEventListener('conx:settings-imported', handleSettingsImported);
+
     return () => {
+      window.removeEventListener('conx:settings-imported', handleSettingsImported);
       if (wailsRuntime && wailsRuntime.EventsOff) {
         wailsRuntime.EventsOff('vm:health:update');
       }
@@ -201,7 +209,10 @@ export default function App() {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           {/* Top Header Navbar */}
-          <Header activeTab={activeTab} />
+          <Header
+            activeTab={activeTab}
+            onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
+          />
 
         {/* Tab Body */}
         <main
@@ -265,6 +276,12 @@ export default function App() {
           onSubmit={handleEditSubmit}
         />
       )}
+
+      {/* Import / Export Settings Modal */}
+      <SettingsBackupModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+      />
     </div>
   );
 }
