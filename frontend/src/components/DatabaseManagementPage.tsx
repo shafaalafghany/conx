@@ -215,6 +215,9 @@ export function DatabaseManagementPage() {
 
   useEffect(() => {
     fetchConnections();
+    const onImported = () => fetchConnections();
+    window.addEventListener('conx:settings-imported', onImported);
+    return () => window.removeEventListener('conx:settings-imported', onImported);
   }, [fetchConnections]);
 
   // Load schema for a connection

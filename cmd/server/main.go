@@ -59,6 +59,8 @@ func main() {
 	mux.HandleFunc("/api/databases/query", srv.handleDatabaseQuery)
 	mux.HandleFunc("/api/redis", srv.handleRedisConnections)
 	mux.HandleFunc("/api/redis/", srv.handleRedisSubroutes)
+	mux.HandleFunc("/api/settings/export", srv.handleSettingsExport)
+	mux.HandleFunc("/api/settings/import", srv.handleSettingsImport)
 
 	// WebSocket Terminal Bridge
 	mux.HandleFunc("/ws/ssh", srv.handleSSHWebSocket)

@@ -146,6 +146,9 @@ export const RedisManagementPage: React.FC = () => {
 
   useEffect(() => {
     fetchConnections();
+    const onImported = () => fetchConnections();
+    window.addEventListener('conx:settings-imported', onImported);
+    return () => window.removeEventListener('conx:settings-imported', onImported);
   }, [fetchConnections]);
 
   // Fetch CLI command history for active connection
