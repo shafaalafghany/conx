@@ -3,10 +3,11 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { useTheme } from '../context/ThemeContext';
-import { X, RefreshCw, Terminal as TerminalIcon, Search, Sparkles } from 'lucide-react';
+import { X, RefreshCw, Terminal as TerminalIcon, Search, Sparkles, KeyRound } from 'lucide-react';
 import { isWails, api } from '../api/client';
 import { TerminalSearchBar, DirEntry } from './TerminalSearchBar';
 import { PrettifyModal } from './terminal/PrettifyModal';
+import { PasswordModal } from './terminal/PasswordModal';
 
 interface TerminalViewProps {
   sessionID: string;
@@ -102,6 +103,64 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const [selectedText, setSelectedText] = useState<string>('');
   const [showPrettify, setShowPrettify] = useState<boolean>(false);
   const lastSelectedTextRef = useRef<string>('');
+
+  // Password / Sudo auto-typing state
+  const [showPasswordModal, setShowPasswordModal] = useState<boolean>(false);
+  const [hasSavedPassword, setHasSavedPassword] = useState<boolean>(false);
+  const [savedPassword, setSavedPassword] = useState<string>('');
+  const [passwordSentToast, setPasswordSentToast] = useState<boolean>(false);
+
+  // Check if VM has saved password
+  useEffect(() => {
+    let isMounted = true;
+    api.getVMPassword(vmID)
+      .then((res) => {
+        if (isMounted && res) {
+          setHasSavedPassword(res.hasPassword);
+          if (res.password) setSavedPassword(res.password);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [vmID]);
+
+  // Quick send password + Enter into terminal session
+  const handleQuickSendPassword = useCallback(async (passToSend?: string) => {
+    const pwd = passToSend ?? savedPassword;
+    if (!pwd) {
+      setShowPasswordModal(true);
+      return;
+    }
+
+    const targetId = wailsSessionIdRef.current;
+    if (isWails()) {
+      if (targetId) {
+        // Send password + newline
+        await api.sendTerminalInput(targetId, `${pwd}\n`).catch(() => {});
+      }
+      if (onSendInput) onSendInput(sessionID, `${pwd}\n`);
+    } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(`${pwd}\n`);
+    }
+
+    // Refocus terminal so typing can resume immediately
+    termInstance.current?.focus();
+
+    // Show temporary toast feedback
+    setPasswordSentToast(true);
+    setTimeout(() => setPasswordSentToast(false), 2000);
+  }, [savedPassword, sessionID, onSendInput]);
+
+  const handleSaveAndSendPassword = useCallback(async (password: string, save: boolean) => {
+    if (save) {
+      await api.setVMPassword(vmID, password).catch(() => {});
+      setHasSavedPassword(true);
+      setSavedPassword(password);
+    }
+    await handleQuickSendPassword(password);
+  }, [vmID, handleQuickSendPassword]);
 
   // Fetch directory listing via Go backend (dual-mode Wails/REST)
   const listDirectory = useCallback(
@@ -577,6 +636,44 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         </div>
 
         <div className="flex items-center gap-1">
+          {/* Quick Password / Sudo Auto-Type Action */}
+          <div className="flex items-center">
+            {hasSavedPassword && savedPassword ? (
+              <div className="flex items-center rounded-lg border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/40 p-0.5 mr-1 shadow-sm">
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleQuickSendPassword()}
+                  title="Auto-type password + Enter (for sudo/prompts)"
+                  className="px-2 py-1 rounded text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-xs"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span className="text-[11px]">Sudo Pass</span>
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setShowPasswordModal(true)}
+                  title="Edit/view saved password"
+                  className="p-1 hover:bg-amber-200/50 dark:hover:bg-amber-900/60 rounded text-amber-700 dark:text-amber-400 transition-colors"
+                >
+                  <span className="text-[10px] px-0.5 font-mono">•••</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setShowPasswordModal(true)}
+                title="Set password for instant sudo typing"
+                className="px-2 py-1 rounded-lg text-xs font-medium border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 transition-all mr-1 cursor-pointer"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-amber-500" />
+                <span className="text-[11px] hidden sm:inline">Set Pass</span>
+              </button>
+            )}
+          </div>
+
           {/* Prettify Button (quick header action when text is selected) */}
           {selectedText && (
             <button
@@ -691,6 +788,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           ref={terminalRef}
           className="flex-1 w-full h-full min-h-0 overflow-hidden"
         />
+
+        {/* Temporary password auto-typed feedback badge */}
+        {passwordSentToast && (
+          <div className="absolute bottom-4 right-6 z-30 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold shadow-lg flex items-center gap-1.5 animate-bounce">
+            <KeyRound className="w-3.5 h-3.5" />
+            <span>Password sent + Enter ↵</span>
+          </div>
+        )}
       </div>
 
       {/* Prettify Log Modal */}
@@ -698,6 +803,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         isOpen={showPrettify}
         onClose={() => setShowPrettify(false)}
         rawText={selectedText || lastSelectedTextRef.current}
+      />
+
+      {/* Set / Send Password Modal */}
+      <PasswordModal
+        isOpen={showPasswordModal}
+        onClose={() => setShowPasswordModal(false)}
+        vmName={vmName}
+        host={host}
+        initialPassword={savedPassword}
+        hasSavedPassword={hasSavedPassword}
+        onSendPassword={handleSaveAndSendPassword}
       />
     </div>
   );

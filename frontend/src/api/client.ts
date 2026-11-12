@@ -59,6 +59,28 @@ export const api = {
     return res.json();
   },
 
+  getVMPassword: async (vmId: string): Promise<{ hasPassword: boolean; password?: string }> => {
+    if (isWails()) {
+      const pass = await getWailsApp().GetVMPassword(vmId);
+      return { hasPassword: Boolean(pass), password: pass || '' };
+    }
+    const res = await fetch(`/api/vms/password?vmId=${encodeURIComponent(vmId)}`);
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  setVMPassword: async (vmId: string, password: string): Promise<void> => {
+    if (isWails()) {
+      return getWailsApp().SetVMPassword(vmId, password);
+    }
+    const res = await fetch(`/api/vms/password?vmId=${encodeURIComponent(vmId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+  },
+
   // --- SSH Terminal ---
   startSSHSession: async (vmId: string, cols = 80, rows = 24): Promise<string> => {
     if (isWails()) {

@@ -32,8 +32,19 @@ export const WindowTopBar: React.FC<WindowTopBarProps> = ({
     return () => window.removeEventListener('resize', checkFullscreen);
   }, []);
 
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('button, a, input, select, textarea, .wails-no-drag, [style*="--wails-draggable: no-drag"]')) {
+      return;
+    }
+    if (typeof window !== 'undefined' && (window as any).runtime?.WindowToggleMaximise) {
+      (window as any).runtime.WindowToggleMaximise();
+    }
+  };
+
   return (
     <div
+      onDoubleClick={handleDoubleClick}
       style={{ '--wails-draggable': 'drag' } as React.CSSProperties}
       className="h-10 flex items-center justify-between px-3 select-none flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700/80 wails-drag"
     >
