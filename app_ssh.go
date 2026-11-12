@@ -131,3 +131,51 @@ func (a *App) ListFiles(vmID string, dir string) (ssh.FileListResult, error) {
 
 	return ssh.FileListResult{Directory: resolved, Entries: entries}, nil
 }
+
+// GetVMPassword retrieves the decrypted password for a VM if set
+func (a *App) GetVMPassword(vmID string) (string, error) {
+	if a.storage == nil || a.vault == nil {
+		return "", fmt.Errorf("subsystems not initialized")
+	}
+
+	vms, err := a.storage.ListVMs()
+	if err != nil {
+		return "", err
+	}
+
+	for _, vm := range vms {
+		if vm.ID == vmID {
+			if vm.EncryptedPassword == "" {
+				return "", nil
+			}
+			return a.vault.Decrypt(vm.EncryptedPassword)
+		}
+	}
+
+	return "", fmt.Errorf("VM not found")
+}
+
+// SetVMPassword encrypts and updates the password for an existing VM
+func (a *App) SetVMPassword(vmID string, newPassword string) error {
+	if a.storage == nil || a.vault == nil {
+		return fmt.Errorf("subsystems not initialized")
+	}
+
+	vms, err := a.storage.ListVMs()
+	if err != nil {
+		return err
+	}
+
+	for _, vm := range vms {
+		if vm.ID == vmID {
+			encrypted, err := a.vault.Encrypt(newPassword)
+			if err != nil {
+				return fmt.Errorf("failed to encrypt password: %w", err)
+			}
+			vm.EncryptedPassword = encrypted
+			return a.storage.SaveVM(vm)
+		}
+	}
+
+	return fmt.Errorf("VM not found")
+}

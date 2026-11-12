@@ -169,3 +169,71 @@ func (s *Server) handleVMFiles(w http.ResponseWriter, r *http.Request) {
 		Entries:   entries,
 	})
 }
+
+// handleVMPassword allows getting or updating the password for a VM
+func (s *Server) handleVMPassword(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	vmID := r.URL.Query().Get("vmId")
+	if vmID == "" {
+		http.Error(w, "Missing vmId parameter", http.StatusBadRequest)
+		return
+	}
+
+	vms, err := s.storage.ListVMs()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var target *database.VirtualMachine
+	for i := range vms {
+		if vms[i].ID == vmID {
+			target = &vms[i]
+			break
+		}
+	}
+
+	if target == nil {
+		http.Error(w, "VM not found", http.StatusNotFound)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		var password string
+		if target.EncryptedPassword != "" {
+			dec, _ := s.vault.Decrypt(target.EncryptedPassword)
+			password = dec
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"hasPassword": target.EncryptedPassword != "",
+			"password":    password,
+		})
+
+	case http.MethodPost, http.MethodPut:
+		var req struct {
+			Password string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		encrypted, err := s.vault.Encrypt(req.Password)
+		if err != nil {
+			http.Error(w, "Failed to encrypt password: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		target.EncryptedPassword = encrypted
+		if err := s.storage.SaveVM(*target); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+		})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
